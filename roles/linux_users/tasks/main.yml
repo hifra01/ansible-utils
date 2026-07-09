@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: MIT
+---
+# tasks file for linux_users
+
+- name: Build effective user list from selected usernames
+  ansible.builtin.set_fact:
+    linux_users_effective: >-
+      {{
+        linux_users_selected
+        | map('extract', linux_users_catalog)
+        | list
+      }}
+
+- name: Validate selected users have at least one SSH public key
+  ansible.builtin.assert:
+    that:
+      - item.ssh_public_keys is defined
+      - item.ssh_public_keys | length > 0
+    fail_msg: "User {{ item.username }} must define at least one ssh_public_keys entry"
+  loop: "{{ linux_users_effective }}"
+
+- name: Ensure selected users exist
+  ansible.builtin.user:
+    name: "{{ item.username }}"
+    shell: "{{ item.shell | default(linux_users_shell) }}"
+    create_home: true
+    state: present
+  loop: "{{ linux_users_effective }}"
+
+- name: Ensure .ssh directory exists
+  ansible.builtin.file:
+    path: "~{{ item.username }}/.ssh"
+    state: directory
+    owner: "{{ item.username }}"
+    group: "{{ item.username }}"
+    mode: "0700"
+  loop: "{{ linux_users_effective }}"
+
+- name: Copy inline private keys
+  ansible.builtin.copy:
+    content: "{{ item.1.content }}"
+    dest: "~{{ item.0.username }}/.ssh/{{ item.1.name }}"
+    owner: "{{ item.0.username }}"
+    group: "{{ item.0.username }}"
+    mode: "{{ item.1.mode | default('0600') }}"
+  loop: "{{ linux_users_effective | subelements('private_keys', skip_missing=True) }}"
+  when: item.1.content is defined
+
+- name: Copy private keys from local files
+  ansible.builtin.copy:
+    src: "{{ item.1.src }}"
+    dest: "~{{ item.0.username }}/.ssh/{{ item.1.name }}"
+    owner: "{{ item.0.username }}"
+    group: "{{ item.0.username }}"
+    mode: "{{ item.1.mode | default('0600') }}"
+  loop: "{{ linux_users_effective | subelements('private_keys', skip_missing=True) }}"
+  when: item.1.src is defined
+
+- name: Manage authorized public keys
+  ansible.posix.authorized_key:
+    user: "{{ item.username }}"
+    key: "{{ item.ssh_public_keys | join('\n') }}"
+    state: present
+    manage_dir: true
+    exclusive: true
+  loop: "{{ linux_users_effective }}"
+
+- name: Configure passwordless sudo for sudo users
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/{{ item.username }}"
+    content: "{{ item.username }} ALL=(ALL) NOPASSWD: ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "/usr/sbin/visudo -cf %s"
+  loop: "{{ linux_users_effective | selectattr('sudo', 'equalto', true) | list }}"
+
+- name: Remove sudoers file for non-sudo users
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/{{ item.username }}"
+    state: absent
+  loop: "{{ linux_users_effective | selectattr('sudo', 'equalto', false) | list }}"

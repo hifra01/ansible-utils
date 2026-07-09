@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: MIT-0
+galaxy_info:
+  author: Antigravity
+  description: Nginx Multi-Distro Hardened Role with Dynamic Virtual Hosts and Cloudflare IP filter
+  company: Antigravity
+
+  license: MIT
+
+  min_ansible_version: "2.10"
+
+  galaxy_tags:
+    - nginx
+    - security
+    - cloudflare
+
+dependencies: []

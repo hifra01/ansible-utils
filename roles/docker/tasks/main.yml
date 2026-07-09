@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for docker
+
+- name: Validate supported platform
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family in ['Debian', 'RedHat']
+    fail_msg: "This role only supports Debian and RedHat family systems."
+
+- name: Setup Docker repository
+  ansible.builtin.include_tasks: setup-repository.yml
+
+- name: Install Docker
+  ansible.builtin.include_tasks: install.yml
+
+- name: Configure Docker daemon
+  ansible.builtin.include_tasks: configure.yml
+
+- name: Manage Docker user access
+  ansible.builtin.include_tasks: users.yml

@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: MIT-0
+---
+# defaults file for docker
+
+docker_edition: "ce"
+
+# Base configuration for Docker daemon.json
+docker_daemon_config:
+  log-driver: "json-file"
+  log-opts:
+    max-size: "10m"
+
+# List of users to add to the docker group
+docker_users: []
+
+# Repository configuration
+docker_repo_url_ce: "https://download.docker.com/linux"
+docker_repo_url_ee: "https://repos.mirantis.com"
+docker_repo_url: "{{ docker_repo_url_ce if docker_edition == 'ce' else docker_repo_url_ee }}"
+
+# CentOS repository is used for RHEL-based systems (CentOS, RedHat, Rocky, Alma)
+docker_rhel_repo_dist: "centos"
+
+# APT architecture mapping for Debian/Ubuntu
+docker_apt_arch_map:
+  x86_64: amd64
+  aarch64: arm64
+  armv7l: armhf
+docker_apt_arch: "{{ docker_apt_arch_map[ansible_architecture] | default(ansible_architecture) }}"
+
+# Packages to install based on edition
+docker_packages_ce:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+docker_packages_ee:
+  - docker-ee
+  - docker-ee-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+docker_packages: "{{ docker_packages_ce if docker_edition == 'ce' else docker_packages_ee }}"

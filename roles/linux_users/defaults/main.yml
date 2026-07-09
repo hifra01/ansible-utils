@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: MIT
+---
+# defaults file for linux_users
+
+linux_users_catalog: {}
+linux_users_selected: []
+linux_users_manage_sudo: true
+linux_users_shell: /bin/bash

@@ -1,0 +1,9 @@
+---
+nginx_packages:
+  - epel-release
+  - nginx
+  - nginx-all-modules
+nginx_config_dir: /etc/nginx
+nginx_site_available_dir: /etc/nginx/conf.d
+nginx_site_enabled_dir: /etc/nginx/conf.d
+nginx_user: nginx

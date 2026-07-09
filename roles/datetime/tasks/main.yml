@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for datetime
+
+- name: Validate supported platform
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family in ['Debian', 'RedHat', 'Alpine', 'Archlinux']
+    fail_msg: "This role only supports Debian, RedHat, Alpine, and Archlinux family systems."
+
+- name: Ensure package cache is updated (Debian/Ubuntu)
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_os_family == 'Debian'
+
+- name: Ensure package cache is updated (Arch Linux)
+  community.general.pacman:
+    update_cache: true
+  when: ansible_os_family == 'Archlinux'
+
+- name: Ensure package cache is updated (Alpine Linux)
+  ansible.builtin.apk:
+    update_cache: true
+  when: ansible_os_family == 'Alpine'
+
+- name: Ensure tzdata is installed
+  ansible.builtin.package:
+    name: tzdata
+    state: present
+
+- name: Configure system timezone
+  community.general.timezone:
+    name: "{{ datetime_tz }}"

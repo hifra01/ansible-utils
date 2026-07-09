@@ -1,0 +1,111 @@
+---
+# tasks file for nginx
+
+- name: Include OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+
+- name: Install Nginx package for current OS family
+  ansible.builtin.include_tasks: "setup-{{ ansible_os_family }}.yml"
+
+- name: Ensure Nginx directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ nginx_config_dir }}"
+    - "{{ nginx_site_available_dir }}"
+    - "{{ nginx_site_enabled_dir }}"
+
+- name: Check if DH parameters file exists
+  ansible.builtin.stat:
+    path: "{{ nginx_config_dir }}/dhparam.pem"
+  register: nginx_dhparam_stat
+
+- name: Generate DH parameters (2048-bit)
+  ansible.builtin.command: "openssl dhparam -out {{ nginx_config_dir }}/dhparam.pem 2048"
+  when: not nginx_dhparam_stat.stat.exists
+  changed_when: true
+  notify: "validate and restart nginx"
+
+- name: Check if any site requires Cloudflare filter
+  ansible.builtin.set_fact:
+    nginx_use_cloudflare: >-
+      {{ nginx_sites |
+         selectattr('name', 'in', nginx_enabled_sites) |
+         selectattr('cloudflare_filter', 'defined') |
+         selectattr('cloudflare_filter', 'equalto', true) |
+         list | length > 0 }}
+
+- name: Configure Cloudflare IP updater and cron job
+  when: nginx_use_cloudflare | bool
+  block:
+    - name: Template update_cloudflare_ips.sh updater script
+      ansible.builtin.template:
+        src: update_cloudflare_ips.sh.j2
+        dest: /usr/local/bin/update_cloudflare_ips.sh
+        mode: '0755'
+
+    - name: Check if cloudflare_ips.conf exists
+      ansible.builtin.stat:
+        path: "{{ nginx_config_dir }}/cloudflare_ips.conf"
+      register: nginx_cloudflare_ips_stat
+
+    - name: Run update_cloudflare_ips.sh to generate initial IP list
+      ansible.builtin.command: /usr/local/bin/update_cloudflare_ips.sh
+      when: not nginx_cloudflare_ips_stat.stat.exists
+      changed_when: true
+
+    - name: Create weekly cron job for updating Cloudflare IPs
+      ansible.builtin.cron:
+        name: "Update Cloudflare IP ranges for Nginx"
+        special_time: weekly
+        job: "/usr/local/bin/update_cloudflare_ips.sh >/dev/null 2>&1"
+
+- name: Remove weekly cron job for updating Cloudflare IPs if not needed
+  ansible.builtin.cron:
+    name: "Update Cloudflare IP ranges for Nginx"
+    state: absent
+  when: not nginx_use_cloudflare | bool
+
+- name: Configure main nginx.conf
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: "{{ nginx_config_dir }}/nginx.conf"
+    mode: '0644'
+  notify: "validate and restart nginx"
+
+- name: Deploy enabled sites configurations
+  ansible.builtin.template:
+    src: site.conf.j2
+    dest: "{{ nginx_site_available_dir }}/{{ item.name }}.conf"
+    mode: '0644'
+  loop: "{{ nginx_sites }}"
+  when: item.name in nginx_enabled_sites
+  notify: "validate and reload nginx"
+
+- name: Enable sites (symlink) on Debian/Ubuntu
+  ansible.builtin.file:
+    src: "{{ nginx_site_available_dir }}/{{ item.name }}.conf"
+    dest: "{{ nginx_site_enabled_dir }}/{{ item.name }}.conf"
+    state: link
+  loop: "{{ nginx_sites }}"
+  when:
+    - ansible_os_family == 'Debian'
+    - item.name in nginx_enabled_sites
+  notify: "validate and reload nginx"
+
+- name: Find all active site configurations
+  ansible.builtin.find:
+    paths: "{{ nginx_site_enabled_dir }}"
+    patterns: "*.conf"
+  register: nginx_active_configs
+
+- name: Clean up unused site configurations
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ nginx_active_configs.files }}"
+  when:
+    - (item.path | basename | regex_replace('\.conf$', '')) not in nginx_enabled_sites
+  notify: "validate and reload nginx"

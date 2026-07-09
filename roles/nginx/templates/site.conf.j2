@@ -1,0 +1,51 @@
+server {
+    listen {{ item.listen | default(80) }};
+    server_name {{ item.domains | default([item.server_name | default('_')]) | join(' ') }};
+
+    {% if item.cloudflare_filter | default(false) | bool %}
+    # Cloudflare IP filter (Access Control & Real IP)
+    include {{ nginx_config_dir }}/cloudflare_ips.conf;
+    real_ip_header CF-Connecting-IP;
+    {% endif %}
+
+    {% if item.custom_headers is defined %}
+    # Custom Headers
+    {% for header in item.custom_headers %}
+    add_header {{ header.name }} "{{ header.value }}"{% if header.always | default(false) | bool %} always{% endif %};
+    {% endfor %}
+    {% endif %}
+
+    {% if item.type | default('static') == 'static' %}
+    root {{ item.root | default('/var/www/html') }};
+    index {{ item.index | default(['index.html', 'index.htm']) | join(' ') }};
+
+    location / {
+        try_files {{ item.try_files | default('$uri $uri/ =404') }};
+    }
+    {% elif item.type == 'proxy' %}
+    location / {
+        proxy_pass {{ item.proxy_pass }};
+        {% if item.proxy_set_headers | default(true) | bool %}
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        {% endif %}
+    }
+    {% elif item.type == 'php' %}
+    root {{ item.root | default('/var/www/html') }};
+    index {{ item.index | default(['index.php', 'index.html', 'index.htm']) | join(' ') }};
+
+    location / {
+        try_files {{ item.try_files | default('$uri $uri/ /index.php$is_args$args') }};
+    }
+
+    location ~ \.php$ {
+        include fastcgi_params;
+        fastcgi_pass {{ item.fastcgi_pass | default('unix:/run/php/php-fpm.sock') }};
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+    {% endif %}
+}
+

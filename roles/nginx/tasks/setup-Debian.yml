@@ -1,0 +1,7 @@
+---
+- name: Install Nginx and extras on Debian/Ubuntu
+  ansible.builtin.apt:
+    name: "{{ nginx_packages }}"
+    state: present
+    update_cache: true
+  notify: "validate and restart nginx"

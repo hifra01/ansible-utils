@@ -1,0 +1,54 @@
+user {{ nginx_user }};
+worker_processes auto;
+pid /run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include {{ nginx_config_dir }}/mime.types;
+    default_type application/octet-stream;
+
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log /var/log/nginx/access.log main;
+    error_log /var/log/nginx/error.log warn;
+
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+
+    # Security Hardening & Buffers
+    server_tokens {{ nginx_server_tokens }};
+    client_max_body_size {{ nginx_client_max_body_size }};
+    client_body_buffer_size {{ nginx_client_body_buffer_size }};
+    client_header_buffer_size {{ nginx_client_header_buffer_size }};
+    large_client_header_buffers {{ nginx_large_client_header_buffers }};
+
+    # SSL/TLS Configuration
+    ssl_protocols {{ nginx_ssl_protocols }};
+    ssl_ciphers {{ nginx_ssl_ciphers }};
+    ssl_prefer_server_ciphers {{ nginx_ssl_prefer_server_ciphers }};
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+    ssl_dhparam {{ nginx_config_dir }}/dhparam.pem;
+
+    # Global Security Headers
+    {% if nginx_security_headers_enabled %}
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    {% endif %}
+
+    # Load configurations
+    include {{ nginx_config_dir }}/conf.d/*.conf;
+    {% if ansible_os_family == 'Debian' %}
+    include {{ nginx_config_dir }}/sites-enabled/*;
+    {% endif %}
+}

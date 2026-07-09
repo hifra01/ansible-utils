@@ -1,0 +1,13 @@
+---
+- name: Install EPEL repository on RHEL-based systems
+  ansible.builtin.package:
+    name: epel-release
+    state: present
+
+- name: Install Nginx and modules on RHEL-based systems
+  ansible.builtin.package:
+    name:
+      - nginx
+      - nginx-all-modules
+    state: present
+  notify: "validate and restart nginx"

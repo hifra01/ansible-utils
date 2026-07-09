@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: MIT-0
+---
+# defaults file for apt_mirror
+
+apt_mirror_enabled: true
+
+apt_mirror_release: "{{ ansible_distribution_release }}"
+
+apt_mirror_main_uri: "http://archive.ubuntu.com/ubuntu"
+apt_mirror_security_uri: "http://security.ubuntu.com/ubuntu"
+
+apt_mirror_components:
+  - main
+  - restricted
+  - universe
+  - multiverse
+
+apt_mirror_main_suites:
+  - "{{ apt_mirror_release }}"
+  - "{{ apt_mirror_release }}-updates"
+  - "{{ apt_mirror_release }}-backports"
+
+apt_mirror_security_suites:
+  - "{{ apt_mirror_release }}-security"
+
+apt_mirror_types:
+  - deb
+
+apt_mirror_signed_by: "/usr/share/keyrings/ubuntu-archive-keyring.gpg"
+
+apt_mirror_legacy_filename_main: "ubuntu-main-mirror"
+apt_mirror_legacy_filename_security: "ubuntu-security-mirror"
+
+apt_mirror_cleanup_legacy_files: true
+apt_mirror_update_cache: true
