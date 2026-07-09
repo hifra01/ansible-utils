@@ -6,14 +6,16 @@ apt_mirror_enabled: true
 
 apt_mirror_release: "{{ ansible_distribution_release }}"
 
-apt_mirror_main_uri: "http://archive.ubuntu.com/ubuntu"
-apt_mirror_security_uri: "http://security.ubuntu.com/ubuntu"
+apt_mirror_main_uri: "{{ 'http://archive.ubuntu.com/ubuntu' if ansible_distribution == 'Ubuntu' else 'http://deb.debian.org/debian' }}"
+apt_mirror_security_uri: "{{ 'http://security.ubuntu.com/ubuntu' if ansible_distribution == 'Ubuntu' else 'http://security.debian.org/debian-security' }}"
 
-apt_mirror_components:
-  - main
-  - restricted
-  - universe
-  - multiverse
+apt_mirror_components: >-
+  {{
+    ['main', 'restricted', 'universe', 'multiverse']
+    if ansible_distribution == 'Ubuntu'
+    else
+    ['main', 'contrib', 'non-free', 'non-free-firmware']
+  }}
 
 apt_mirror_main_suites:
   - "{{ apt_mirror_release }}"
@@ -26,10 +28,19 @@ apt_mirror_security_suites:
 apt_mirror_types:
   - deb
 
-apt_mirror_signed_by: "/usr/share/keyrings/ubuntu-archive-keyring.gpg"
+apt_mirror_signed_by: >-
+  {{
+    '/usr/share/keyrings/ubuntu-archive-keyring.gpg'
+    if ansible_distribution == 'Ubuntu'
+    else
+    '/usr/share/keyrings/debian-archive-keyring.gpg'
+  }}
 
-apt_mirror_legacy_filename_main: "ubuntu-main-mirror"
-apt_mirror_legacy_filename_security: "ubuntu-security-mirror"
+apt_mirror_legacy_filename_main: "{{ 'ubuntu-main-mirror' if ansible_distribution == 'Ubuntu' else 'debian-main-mirror' }}"
+apt_mirror_legacy_filename_security: "{{ 'ubuntu-security-mirror' if ansible_distribution == 'Ubuntu' else 'debian-security-mirror' }}"
+
+apt_mirror_deb822_name_main: "{{ 'ubuntu-main' if ansible_distribution == 'Ubuntu' else 'debian-main' }}"
+apt_mirror_deb822_name_security: "{{ 'ubuntu-security' if ansible_distribution == 'Ubuntu' else 'debian-security' }}"
 
 apt_mirror_cleanup_legacy_files: true
 apt_mirror_update_cache: true

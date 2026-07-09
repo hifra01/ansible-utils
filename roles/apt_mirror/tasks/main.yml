@@ -5,28 +5,33 @@
 - name: Validate supported platform
   ansible.builtin.assert:
     that:
-      - ansible_distribution == 'Ubuntu'
-    fail_msg: 'This role currently supports Ubuntu only.'
+      - ansible_distribution in ['Debian', 'Ubuntu']
+    fail_msg: 'This role currently supports Debian and Ubuntu only.'
 
 - name: Set repository format fact
   ansible.builtin.set_fact:
-    apt_mirror_use_deb822: "{{ ansible_distribution_version is version('24.04', '>=') }}"
+    apt_mirror_use_deb822: >-
+      {{
+        (ansible_distribution == 'Ubuntu' and ansible_distribution_version is version('24.04', '>='))
+        or
+        (ansible_distribution == 'Debian' and ansible_distribution_version is version('12', '>='))
+      }}
 
-- name: Ensure python3-debian is installed for Ubuntu 24+
+- name: Ensure python3-debian is installed for DEB822 support
   ansible.builtin.package:
     name: python3-debian
     state: present
   when: apt_mirror_use_deb822
 
-- name: Ensure python3-apt is installed for Ubuntu older than 24.04
+- name: Ensure python3-apt is installed for legacy apt support
   ansible.builtin.package:
     name: python3-apt
     state: present
   when: not apt_mirror_use_deb822
 
-- name: Configure Ubuntu 24+ main archive mirror
+- name: Configure main archive mirror (DEB822)
   ansible.builtin.deb822_repository:
-    name: ubuntu-main
+    name: "{{ apt_mirror_deb822_name_main }}"
     state: "{{ 'present' if apt_mirror_enabled else 'absent' }}"
     enabled: true
     types: "{{ apt_mirror_types }}"
@@ -38,9 +43,9 @@
   when: apt_mirror_use_deb822
   notify: Update apt cache
 
-- name: Configure Ubuntu 24+ security archive mirror
+- name: Configure security archive mirror (DEB822)
   ansible.builtin.deb822_repository:
-    name: ubuntu-security
+    name: "{{ apt_mirror_deb822_name_security }}"
     state: "{{ 'present' if apt_mirror_enabled else 'absent' }}"
     enabled: true
     types: "{{ apt_mirror_types }}"
@@ -52,7 +57,7 @@
   when: apt_mirror_use_deb822
   notify: Update apt cache
 
-- name: Configure Ubuntu older than 24.04 main archive mirror
+- name: Configure main archive mirror (Legacy)
   ansible.builtin.apt_repository:
     repo: >-
       deb {{ apt_mirror_main_uri }}
@@ -65,7 +70,7 @@
   when: not apt_mirror_use_deb822
   notify: Update apt cache
 
-- name: Configure Ubuntu older than 24.04 security archive mirror
+- name: Configure security archive mirror (Legacy)
   ansible.builtin.apt_repository:
     repo: >-
       deb {{ apt_mirror_security_uri }}
@@ -78,7 +83,7 @@
   when: not apt_mirror_use_deb822
   notify: Update apt cache
 
-- name: Remove legacy .list mirror files on Ubuntu 24+
+- name: Remove legacy .list mirror files when using DEB822
   ansible.builtin.file:
     path: "/etc/apt/sources.list.d/{{ item }}.list"
     state: absent
@@ -90,13 +95,13 @@
     - apt_mirror_cleanup_legacy_files | bool
   notify: Update apt cache
 
-- name: Remove deb822 .sources mirror files on Ubuntu older than 24.04
+- name: Remove DEB822 .sources mirror files when using Legacy
   ansible.builtin.file:
     path: "/etc/apt/sources.list.d/{{ item }}.sources"
     state: absent
   loop:
-    - ubuntu-main
-    - ubuntu-security
+    - "{{ apt_mirror_deb822_name_main }}"
+    - "{{ apt_mirror_deb822_name_security }}"
   when:
     - not apt_mirror_use_deb822
     - apt_mirror_cleanup_legacy_files | bool

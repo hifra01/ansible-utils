@@ -1,3 +1,8 @@
-#SPDX-License-Identifier: MIT-0
+# SPDX-License-Identifier: MIT-0
 ---
 # handlers file for apt_mirror
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+  when: apt_mirror_update_cache | bool
