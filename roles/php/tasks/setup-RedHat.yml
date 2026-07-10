@@ -1,0 +1,13 @@
+---
+# tasks file for php setup on RedHat/RHEL-based OS
+
+- name: Install EPEL release repository
+  ansible.builtin.dnf:
+    name: epel-release
+    state: present
+
+- name: Install Remi RPM repository
+  ansible.builtin.dnf:
+    name: "{{ php_remi_repo_url }}"
+    state: present
+    disable_gpg_check: false
