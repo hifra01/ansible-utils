@@ -1,0 +1,139 @@
+---
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    # Run every Sunday at 00:00 UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Yamllint
+        run: yamllint .
+
+      - name: Run Ansible Lint
+        run: ansible-lint
+
+  detect-changes:
+    name: Detect Changed Roles
+    runs-on: ubuntu-latest
+    outputs:
+      apt_mirror: ${{ steps.filter.outputs.apt_mirror }}
+      datetime: ${{ steps.filter.outputs.datetime }}
+      docker: ${{ steps.filter.outputs.docker }}
+      linux_users: ${{ steps.filter.outputs.linux_users }}
+      nginx: ${{ steps.filter.outputs.nginx }}
+      php: ${{ steps.filter.outputs.php }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for changes in roles
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            apt_mirror:
+              - 'roles/apt_mirror/**'
+            datetime:
+              - 'roles/datetime/**'
+            docker:
+              - 'roles/docker/**'
+            linux_users:
+              - 'roles/linux_users/**'
+            nginx:
+              - 'roles/nginx/**'
+            php:
+              - 'roles/php/**'
+
+  molecule:
+    name: "Molecule: ${{ matrix.role }} (${{ matrix.distro }})"
+    needs: [lint, detect-changes]
+    runs-on: ubuntu-latest
+    if: |
+      always() &&
+      (needs.lint.result == 'success') &&
+      (needs.detect-changes.outputs[matrix.role] == 'true' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    strategy:
+      fail-fast: false
+      matrix:
+        role:
+          - apt_mirror
+          - datetime
+          - docker
+          - linux_users
+          - nginx
+          - php
+        distro:
+          - ubuntu2204
+          - ubuntu2404
+          - rockylinux9
+          - almalinux9
+          - almalinux8
+        include:
+          - distro: ubuntu2204
+            image: geerlingguy/docker-ubuntu2204-ansible:latest
+          - distro: ubuntu2404
+            image: geerlingguy/docker-ubuntu2404-ansible:latest
+          - distro: rockylinux9
+            image: geerlingguy/docker-rockylinux9-ansible:latest
+          - distro: almalinux9
+            image: geerlingguy/docker-almalinux9-ansible:latest
+          - distro: almalinux8
+            image: geerlingguy/docker-almalinux8-ansible:latest
+        exclude:
+          # apt_mirror only supports Debian/Ubuntu family
+          - role: apt_mirror
+            distro: rockylinux9
+          - role: apt_mirror
+            distro: almalinux9
+          - role: apt_mirror
+            distro: almalinux8
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Molecule Test
+        run: |
+          cd roles/${{ matrix.role }}
+          molecule test
+        env:
+          PY_COLORS: '1'
+          ANSIBLE_FORCE_COLOR: '1'
+          MOLECULE_DISTRO: ${{ matrix.image }}

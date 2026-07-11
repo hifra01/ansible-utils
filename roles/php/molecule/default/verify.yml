@@ -1,0 +1,28 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Run php CLI check
+      ansible.builtin.command: php -v
+      register: php_cli
+      changed_when: false
+
+    - name: Verify php command succeeded
+      ansible.builtin.assert:
+        that:
+          - php_cli.rc == 0
+        fail_msg: "PHP CLI did not run successfully"
+
+    - name: Check PHP extensions
+      ansible.builtin.command: php -m
+      register: php_modules
+      changed_when: false
+
+    - name: Verify standard extensions are loaded
+      ansible.builtin.assert:
+        that:
+          - "'curl' in php_modules.stdout_lines"
+          - "'mbstring' in php_modules.stdout_lines"
+          - "'xml' in php_modules.stdout_lines"
+          - "'zip' in php_modules.stdout_lines"

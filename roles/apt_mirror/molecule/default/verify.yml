@@ -1,0 +1,43 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Set repository format fact
+      ansible.builtin.set_fact:
+        apt_mirror_use_deb822: >-
+          {{
+            (ansible_distribution == 'Ubuntu' and ansible_distribution_version is version('24.04', '>='))
+            or
+            (ansible_distribution == 'Debian' and ansible_distribution_version is version('12', '>='))
+          }}
+
+    - name: Verify DEB822 files exist when enabled
+      block:
+        - name: Check DEB822 main source file
+          ansible.builtin.stat:
+            path: "/etc/apt/sources.list.d/{{ 'ubuntu-main' if ansible_distribution == 'Ubuntu' else 'debian-main' }}.sources"
+          register: deb822_main
+
+        - name: Assert DEB822 file exists
+          ansible.builtin.assert:
+            that:
+              - deb822_main.stat.exists
+      when: apt_mirror_use_deb822
+
+    - name: Verify legacy list files exist when enabled
+      block:
+        - name: Check legacy list main file
+          ansible.builtin.stat:
+            path: "/etc/apt/sources.list.d/{{ 'ubuntu-main-mirror' if ansible_distribution == 'Ubuntu' else 'debian-main-mirror' }}.list"
+          register: legacy_main
+
+        - name: Assert legacy list file exists
+          ansible.builtin.assert:
+            that:
+              - legacy_main.stat.exists
+      when: not apt_mirror_use_deb822
+
+    - name: Run apt-get update to verify configuration is valid
+      ansible.builtin.command: apt-get update
+      changed_when: false
