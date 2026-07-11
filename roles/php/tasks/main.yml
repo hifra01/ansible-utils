@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for php
+
+- name: Include OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+
+- name: Setup repository for current OS family
+  ansible.builtin.include_tasks: "setup-{{ ansible_os_family }}.yml"
+
+- name: Install and configure PHP version(s)
+  ansible.builtin.include_tasks: install-php.yml
+  loop: "{{ php_versions }}"
+  loop_control:
+    loop_var: php_ver

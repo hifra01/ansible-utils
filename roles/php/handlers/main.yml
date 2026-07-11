@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: MIT-0
+---
+# handlers file for php
+
+- name: Restart PHP-FPM service version
+  ansible.builtin.service:
+    name: "{{ php_fpm_service_pattern | replace('version_nodot', item | replace('.', '')) | replace('version', item) }}"
+    state: restarted
+  loop: "{{ php_versions }}"

@@ -1,0 +1,30 @@
+---
+# tasks file for php setup on Debian/Ubuntu
+
+- name: Install prerequisite packages for repository setup
+  ansible.builtin.apt:
+    name: "{{ php_pre_packages }}"
+    state: present
+    update_cache: true
+
+- name: Add Ondřej Surý PHP repository on Debian
+  when: ansible_distribution == 'Debian'
+  block:
+    - name: Download Ondřej Surý PHP repository GPG key
+      ansible.builtin.get_url:
+        url: https://packages.sury.org/php/apt.gpg
+        dest: /etc/apt/trusted.gpg.d/sury-php.gpg
+        mode: '0644'
+
+    - name: Add Ondřej Surý PHP apt repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/trusted.gpg.d/sury-php.gpg] https://packages.sury.org/php/ {{ ansible_distribution_release }} main"
+        state: present
+        filename: sury-php
+
+- name: Add Ondřej Surý PHP PPA on Ubuntu
+  ansible.builtin.apt_repository:
+    repo: 'ppa:ondrej/php'
+    state: present
+    update_cache: true
+  when: ansible_distribution == 'Ubuntu'

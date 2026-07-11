@@ -1,0 +1,39 @@
+---
+# tasks file for installing a specific PHP version
+
+- name: Install PHP and FPM for version {{ php_ver }}
+  block:
+    - name: Construct package names list
+      ansible.builtin.set_fact:
+        _php_packages_to_install: "{{ _php_base_packages + _php_extension_packages }}"
+      vars:
+        php_ver_nodot: "{{ php_ver | replace('.', '') }}"
+        _php_base_packages:
+          - "{{ php_package_pattern | replace('version_nodot', php_ver_nodot) | replace('version', php_ver) }}"
+          - "{{ php_fpm_package_pattern | replace('version_nodot', php_ver_nodot) | replace('version', php_ver) }}"
+        _php_extension_packages: >-
+          {%- set pkgs = [] -%}
+          {%- for ext in php_extensions -%}
+            {%- if ansible_os_family == 'RedHat' -%}
+              {%- set ext_mapped = php_extension_map[ext] | default(ext) -%}
+              {%- set pkg = 'php' ~ php_ver_nodot ~ '-php-' ~ ext_mapped -%}
+            {%- else -%}
+              {%- set pkg = 'php' ~ php_ver ~ '-' ~ ext -%}
+            {%- endif -%}
+            {%- set _ = pkgs.append(pkg) -%}
+          {%- endfor -%}
+          {{ pkgs }}
+
+    - name: Install packages for PHP {{ php_ver }}
+      ansible.builtin.package:
+        name: "{{ _php_packages_to_install }}"
+        state: present
+      notify: "Restart PHP-FPM service version"
+
+    - name: Ensure PHP-FPM service is started and enabled
+      ansible.builtin.service:
+        name: "{{ php_fpm_service_pattern | replace('version_nodot', php_ver_nodot) | replace('version', php_ver) }}"
+        state: started
+        enabled: true
+      vars:
+        php_ver_nodot: "{{ php_ver | replace('.', '') }}"

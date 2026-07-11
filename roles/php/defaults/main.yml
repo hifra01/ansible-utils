@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: MIT-0
+---
+# defaults file for php
+
+# List of PHP versions to install. Can contain multiple versions (e.g. ["7.4", "8.2"])
+php_versions:
+  - "8.2"
+
+# List of PHP extensions to install. Common extensions for Laravel.
+php_extensions:
+  - bcmath
+  - curl
+  - mbstring
+  - xml
+  - zip
+  - sqlite3
+  - mysql

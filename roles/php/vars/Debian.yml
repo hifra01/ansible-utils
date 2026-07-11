@@ -1,0 +1,13 @@
+---
+# vars file for php (Debian family)
+
+php_pre_packages:
+  - apt-transport-https
+  - ca-certificates
+  - gnupg2
+  - software-properties-common
+
+php_package_pattern: "php{{ version }}"
+php_fpm_package_pattern: "php{{ version }}-fpm"
+php_extension_package_pattern: "php{{ version }}-{{ extension }}"
+php_fpm_service_pattern: "php{{ version }}-fpm"
