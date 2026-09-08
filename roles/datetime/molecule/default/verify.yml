@@ -1,7 +1,6 @@
 ---
 - name: Verify
   hosts: all
-  become: true
   tasks:
     - name: Get current timezone
       ansible.builtin.command: date +%Z

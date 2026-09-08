@@ -41,9 +41,9 @@ jobs:
         distro:
           - geerlingguy/docker-ubuntu2204-ansible
           - geerlingguy/docker-ubuntu2404-ansible
-          - geerlingguy/docker-almalinux9-ansible
-          - geerlingguy/docker-almalinux8-ansible
+          - geerlingguy/docker-debian12-ansible
           - geerlingguy/docker-rockylinux9-ansible
+          - geerlingguy/docker-rockylinux8-ansible
         role:
           - apt_mirror
           - datetime
@@ -51,6 +51,11 @@ jobs:
           - linux_users
           - nginx
           - php
+        exclude:
+          - distro: geerlingguy/docker-rockylinux9-ansible
+            role: apt_mirror
+          - distro: geerlingguy/docker-rockylinux8-ansible
+            role: apt_mirror
 
     steps:
       - name: Checkout Code

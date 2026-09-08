@@ -14,6 +14,9 @@ platforms:
     pre_build_image: true
 provisioner:
   name: ansible
+  config_options:
+    defaults:
+      become_method: su
   inventory:
     host_vars:
       localhost:

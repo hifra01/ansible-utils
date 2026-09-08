@@ -1,7 +1,6 @@
 ---
 - name: Verify
   hosts: all
-  become: true
   tasks:
     - name: Verify PHP CLI is installed
       ansible.builtin.command: php -v
