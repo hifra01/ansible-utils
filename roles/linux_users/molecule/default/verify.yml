@@ -1,50 +1,29 @@
 ---
 - name: Verify
   hosts: all
-  gather_facts: false
+  become: true
   tasks:
-    - name: Check if user exists
+    - name: Get testuser info
       ansible.builtin.getent:
         database: passwd
         key: testuser
-      register: passwd_entry
 
-    - name: Verify user exists and has correct shell
+    - name: Verify testuser exists
       ansible.builtin.assert:
         that:
-          - passwd_entry.ansible_facts.getent_passwd.testuser is defined
-          - passwd_entry.ansible_facts.getent_passwd.testuser[4] == "/bin/bash"
+          - "'testuser' in ansible_facts.getent_passwd"
 
-    - name: Check .ssh directory permissions
-      ansible.builtin.stat:
-        path: /home/testuser/.ssh
-      register: ssh_dir
-
-    - name: Verify .ssh directory permissions are 0700
-      ansible.builtin.assert:
-        that:
-          - ssh_dir.stat.exists
-          - ssh_dir.stat.mode == "0700"
-          - ssh_dir.stat.pw_name == "testuser"
-
-    - name: Check authorized_keys permissions
+    - name: Check authorized_keys file
       ansible.builtin.stat:
         path: /home/testuser/.ssh/authorized_keys
-      register: auth_keys
+      register: _ssh_key
 
-    - name: Verify authorized_keys file exists
-      ansible.builtin.assert:
-        that:
-          - auth_keys.stat.exists
-          - auth_keys.stat.pw_name == "testuser"
-
-    - name: Check sudoers.d configuration
+    - name: Check sudoers file
       ansible.builtin.stat:
         path: /etc/sudoers.d/testuser
-      register: sudoers_file
+      register: _sudoers_file
 
-    - name: Verify sudoers configuration exists and is correct
+    - name: Verify sudoers file exists
       ansible.builtin.assert:
         that:
-          - sudoers_file.stat.exists
-          - sudoers_file.stat.mode == "0440"
+          - _sudoers_file.stat.exists

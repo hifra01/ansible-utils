@@ -1,0 +1,26 @@
+---
+- name: Prepare
+  hosts: all
+  become: true
+  tasks:
+    - name: Update apt cache (Debian/Ubuntu)
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_os_family == 'Debian'
+
+    - name: Ensure cron and curl are installed (Debian/Ubuntu)
+      ansible.builtin.package:
+        name:
+          - cron
+          - curl
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Ensure cronie and curl are installed (RedHat)
+      ansible.builtin.package:
+        name:
+          - cronie
+          - curl
+        state: present
+      when: ansible_os_family == 'RedHat'

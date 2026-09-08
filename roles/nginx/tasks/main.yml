@@ -109,3 +109,9 @@
   when:
     - (item.path | basename | regex_replace('\.conf$', '')) not in nginx_enabled_sites
   notify: "validate and reload nginx"
+
+- name: Ensure Nginx service is running and enabled
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true

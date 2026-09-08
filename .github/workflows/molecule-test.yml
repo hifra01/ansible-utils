@@ -1,0 +1,92 @@
+---
+name: Molecule Tests
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  schedule:
+    - cron: '0 0 * * 0' # Weekly run
+
+jobs:
+  lint:
+    name: Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install yamllint ansible-lint
+      - name: Run yamllint
+        run: yamllint .
+      - name: Run ansible-lint
+        run: ansible-lint
+
+  molecule:
+    name: Molecule Test (${{ matrix.distro }}, ${{ matrix.role }})
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro:
+          - geerlingguy/docker-ubuntu2204-ansible
+          - geerlingguy/docker-ubuntu2404-ansible
+          - geerlingguy/docker-almalinux9-ansible
+          - geerlingguy/docker-almalinux8-ansible
+          - geerlingguy/docker-rockylinux9-ansible
+        role:
+          - apt_mirror
+          - datetime
+          - docker
+          - linux_users
+          - nginx
+          - php
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check changed files (only for push/pr)
+        id: changed-files
+        if: github.event_name != 'schedule'
+        uses: tj-actions/changed-files@v44
+        with:
+          files: |
+            roles/${{ matrix.role }}/**
+
+      - name: Skip if role not changed
+        if: github.event_name != 'schedule' && steps.changed-files.outputs.any_changed == 'false'
+        run: echo "Role ${{ matrix.role }} not changed. Skipping." && exit 0
+
+      - name: Set up Python
+        if: github.event_name == 'schedule' || steps.changed-files.outputs.any_changed == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        if: github.event_name == 'schedule' || steps.changed-files.outputs.any_changed == 'true'
+        run: |
+          pip install "molecule-plugins[docker]" "molecule" "ansible-core"
+          ansible-galaxy collection install community.docker
+          ansible-galaxy collection install .
+
+      - name: Run Molecule tests
+        if: github.event_name == 'schedule' || steps.changed-files.outputs.any_changed == 'true'
+        run: molecule test
+        env:
+          MOLECULE_DISTRO: ${{ matrix.distro }}
+          MOLECULE_COMMAND: ""
+        working-directory: roles/${{ matrix.role }}

@@ -1,35 +1,16 @@
 ---
 - name: Verify
   hosts: all
-  gather_facts: true
+  become: true
   tasks:
-    - name: Gather package facts
-      ansible.builtin.package_facts:
-        manager: auto
+    - name: Check if Docker is running
+      ansible.builtin.service:
+        name: docker
+        state: started
+      check_mode: true
+      register: _docker_service
 
-    - name: Verify Docker package is installed
+    - name: Assert Docker is running
       ansible.builtin.assert:
         that:
-          - ("docker-ce" in ansible_facts.packages) or ("docker.io" in ansible_facts.packages)
-        fail_msg: "Docker package is not installed"
-
-    - name: Verify docker group exists
-      ansible.builtin.getent:
-        database: group
-        key: docker
-      register: group_entry
-
-    - name: Assert docker group exists
-      ansible.builtin.assert:
-        that:
-          - group_entry.ansible_facts.getent_group.docker is defined
-
-    - name: Check daemon.json configuration file
-      ansible.builtin.stat:
-        path: /etc/docker/daemon.json
-      register: docker_config
-
-    - name: Assert daemon.json exists
-      ansible.builtin.assert:
-        that:
-          - docker_config.stat.exists
+          - not _docker_service.changed

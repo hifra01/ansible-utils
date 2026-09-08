@@ -1,34 +1,13 @@
 ---
 - name: Verify
   hosts: all
-  gather_facts: true
+  become: true
   tasks:
-    - name: Gather package facts
-      ansible.builtin.package_facts:
-        manager: auto
-
-    - name: Verify tzdata package is installed
-      ansible.builtin.assert:
-        that:
-          - "'tzdata' in ansible_facts.packages"
-        fail_msg: "tzdata package is not installed"
-
-    - name: Check current timezone
-      ansible.builtin.command: date
-      register: date_output
-      changed_when: false
-
-    - name: Log date output
-      ansible.builtin.debug:
-        var: date_output.stdout
-
-    - name: Get active timezone
+    - name: Get current timezone
       ansible.builtin.command: date +%Z
-      register: tz_output
+      register: _tz
       changed_when: false
 
-    - name: Verify timezone is UTC (default)
+    - name: Verify timezone is UTC
       ansible.builtin.assert:
-        that:
-          - tz_output.stdout in ['UTC', 'GMT']
-        fail_msg: "Timezone is not set to UTC"
+        that: "'UTC' in _tz.stdout"

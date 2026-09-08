@@ -1,8 +1,8 @@
 ---
 - name: Converge
   hosts: all
-  gather_facts: true
+  become: true
   tasks:
-    - name: Include docker
+    - name: "Include hifra01.utils.docker"
       ansible.builtin.include_role:
-        name: docker
+        name: "hifra01.utils.docker"

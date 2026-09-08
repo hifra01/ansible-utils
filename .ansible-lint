@@ -1,0 +1,14 @@
+---
+profile: min
+
+exclude_paths:
+  - .venv/
+  - .ansible/
+
+warn_list:
+  - galaxy[no-changelog]
+  - meta-incorrect
+  - var-naming
+  - fqcn
+  - yaml
+  - name[play]

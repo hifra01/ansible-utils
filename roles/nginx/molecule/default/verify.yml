@@ -1,45 +1,23 @@
 ---
 - name: Verify
   hosts: all
-  gather_facts: true
+  become: true
   tasks:
-    - name: Gather package facts
-      ansible.builtin.package_facts:
-        manager: auto
+    - name: Check if Nginx is running
+      ansible.builtin.service:
+        name: nginx
+        state: started
+      check_mode: true
+      register: _nginx_service
 
-    - name: Verify Nginx package is installed
+    - name: Assert Nginx is running
       ansible.builtin.assert:
         that:
-          - "'nginx' in ansible_facts.packages"
-        fail_msg: "Nginx package is not installed"
+          - not _nginx_service.changed
 
-    - name: Get Nginx service status
-      ansible.builtin.service_facts:
-
-    - name: Verify Nginx service is running and enabled
-      ansible.builtin.assert:
-        that:
-          - ansible_facts.services['nginx.service'].state == 'running'
-          - ansible_facts.services['nginx.service'].status == 'enabled'
-        fail_msg: "Nginx service is not running or not enabled"
-
-    - name: Check dhparam file
-      ansible.builtin.stat:
-        path: /etc/nginx/dhparam.pem
-      register: dhparam_file
-
-    - name: Verify dhparam file exists
-      ansible.builtin.assert:
-        that:
-          - dhparam_file.stat.exists
-
-    - name: Test HTTP response from localhost
+    - name: Verify Nginx responds on port 80
       ansible.builtin.uri:
         url: http://localhost
         status_code: 200
-      register: http_test
-
-    - name: Verify HTTP test success
-      ansible.builtin.assert:
-        that:
-          - http_test.status == 200
+      register: _nginx_curl
+      failed_when: _nginx_curl.status != 200

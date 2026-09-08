@@ -1,8 +1,8 @@
 ---
 - name: Converge
   hosts: all
-  gather_facts: true
+  become: true
   tasks:
-    - name: Include php
+    - name: "Include hifra01.utils.php"
       ansible.builtin.include_role:
-        name: php
+        name: "hifra01.utils.php"
