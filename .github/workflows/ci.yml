@@ -91,28 +91,27 @@ jobs:
         distro:
           - ubuntu2204
           - ubuntu2404
+          - debian12
           - rockylinux9
-          - almalinux9
-          - almalinux8
+          - rockylinux8
         include:
           - distro: ubuntu2204
             image: geerlingguy/docker-ubuntu2204-ansible:latest
           - distro: ubuntu2404
             image: geerlingguy/docker-ubuntu2404-ansible:latest
+          - distro: debian12
+            image: geerlingguy/docker-debian12-ansible:latest
           - distro: rockylinux9
             image: geerlingguy/docker-rockylinux9-ansible:latest
-          - distro: almalinux9
-            image: geerlingguy/docker-almalinux9-ansible:latest
-          - distro: almalinux8
-            image: geerlingguy/docker-almalinux8-ansible:latest
+          - distro: rockylinux8
+            image: geerlingguy/docker-rockylinux8-ansible:latest
         exclude:
           # apt_mirror only supports Debian/Ubuntu family
           - role: apt_mirror
             distro: rockylinux9
           - role: apt_mirror
-            distro: almalinux9
-          - role: apt_mirror
-            distro: almalinux8
+            distro: rockylinux8
+
 
     steps:
       - name: Checkout code

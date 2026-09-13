@@ -1,0 +1,13 @@
+---
+- name: Prepare
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Ensure Python 3.9+ is installed on RHEL/Rocky 8
+      ansible.builtin.raw: |
+        if [ -f /etc/redhat-release ] && grep -q 'release 8' /etc/redhat-release; then
+          if ! command -v python3.9 >/dev/null 2>&1; then
+            dnf install -y python39 && alternatives --set python3 /usr/bin/python3.9
+          fi
+        fi
+      changed_when: false

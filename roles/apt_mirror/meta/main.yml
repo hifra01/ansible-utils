@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: MIT-0
+---
 galaxy_info:
-  author: Antigravity
+  author: Hilman F. Rakhmad
   description: Configure apt mirrors for Debian and Ubuntu
-  company: Hifra
+  company: hifra.dev
 
   # If the issue tracker for your role is not on github, uncomment the
   # next line and provide a value

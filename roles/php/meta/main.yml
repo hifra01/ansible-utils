@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: MIT-0
 ---
 galaxy_info:
-  author: Hilman Fathur Rakhmad
+  author: Hilman F. Rakhmad
   description: Ansible role to install and configure PHP (Multi-Version & Multi-OS)
-  company: hifra01
+  company: hifra.dev
   license: MIT
   min_ansible_version: "2.9"
   galaxy_tags:
