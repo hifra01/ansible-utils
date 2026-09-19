@@ -10,7 +10,7 @@ on:
       - main
   schedule:
     # Run every Sunday at 00:00 UTC
-    - cron: '0 0 * * 0'
+    - cron: "0 0 * * 0"
   workflow_dispatch:
 
 jobs:
@@ -24,8 +24,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-          cache: 'pip'
+          python-version: "3.14"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
@@ -112,7 +112,6 @@ jobs:
           - role: apt_mirror
             distro: rockylinux8
 
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -120,8 +119,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-          cache: 'pip'
+          python-version: "3.10"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
@@ -133,6 +132,6 @@ jobs:
           cd roles/${{ matrix.role }}
           molecule test
         env:
-          PY_COLORS: '1'
-          ANSIBLE_FORCE_COLOR: '1'
+          PY_COLORS: "1"
+          ANSIBLE_FORCE_COLOR: "1"
           MOLECULE_DISTRO: ${{ matrix.image }}
