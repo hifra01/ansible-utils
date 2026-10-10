@@ -9,3 +9,14 @@
           command -v python3.9 >/dev/null 2>&1 || dnf install -y python39
         fi
       changed_when: false
+
+    - name: Gather facts to detect OS
+      ansible.builtin.setup:
+
+    - name: Use Python 3.9 on RHEL/Rocky 8 targets
+      ansible.builtin.set_fact:
+        ansible_python_interpreter: /usr/bin/python3.9
+      when:
+        - ansible_facts.os_family == 'RedHat'
+        - ansible_facts.distribution_major_version | int == 8
+        - ansible_facts.distribution != 'Fedora'

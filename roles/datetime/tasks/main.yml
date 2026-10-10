@@ -24,10 +24,25 @@
     update_cache: true
   when: ansible_os_family == 'Alpine'
 
-- name: Ensure tzdata is installed
+# - name: Ensure tzdata is installed (RHEL 8)
+#   # ansible-core >= 2.17 cannot run modules on RHEL 8's Python 3.6, and
+#   # python39-dnf does not exist, so the dnf module is unusable on 3.9.
+#   # Fall back to raw dnf command for RHEL 8 targets only.
+#   ansible.builtin.raw: dnf install -y tzdata
+#   when:
+#     - ansible_facts.os_family == 'RedHat'
+#     - ansible_facts.distribution_major_version | int == 8
+#     - ansible_facts.distribution != 'Fedora'
+#   changed_when: false
+
+- name: Ensure tzdata is installed (other platforms)
   ansible.builtin.package:
     name: tzdata
     state: present
+  # when: >-
+  #   not (ansible_facts.os_family == 'RedHat'
+  #        and ansible_facts.distribution_major_version | int == 8
+  #        and ansible_facts.distribution != 'Fedora')
 
 - name: Configure system timezone
   community.general.timezone:
