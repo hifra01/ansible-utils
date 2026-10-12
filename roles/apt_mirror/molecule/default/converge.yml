@@ -1,0 +1,8 @@
+---
+- name: Converge
+  hosts: all
+  tasks:
+    - name: "Include hifra01.utils.apt_mirror"
+      ansible.builtin.include_role:
+        name: "hifra01.utils.apt_mirror"
+      when: ansible_distribution in ['Debian', 'Ubuntu']

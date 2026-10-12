@@ -1,0 +1,22 @@
+---
+- name: Verify
+  hosts: all
+  tasks:
+    - name: Check if Nginx is running
+      ansible.builtin.service:
+        name: nginx
+        state: started
+      check_mode: true
+      register: _nginx_service
+
+    - name: Assert Nginx is running
+      ansible.builtin.assert:
+        that:
+          - not _nginx_service.changed
+
+    - name: Verify Nginx responds on port 80
+      ansible.builtin.uri:
+        url: http://localhost
+        status_code: 200
+      register: _nginx_curl
+      failed_when: _nginx_curl.status != 200

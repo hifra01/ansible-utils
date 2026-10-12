@@ -1,0 +1,16 @@
+---
+- name: Converge
+  hosts: all
+  vars:
+    linux_users_catalog:
+      testuser:
+        username: testuser
+        sudo: true
+        ssh_public_keys:
+          - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFTESTKEY testuser@test"
+    linux_users_selected:
+      - testuser
+  tasks:
+    - name: "Include hifra01.utils.linux_users"
+      ansible.builtin.include_role:
+        name: "hifra01.utils.linux_users"

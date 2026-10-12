@@ -7,7 +7,7 @@ php_pre_packages:
   - gnupg2
   - software-properties-common
 
-php_package_pattern: "php{{ version }}"
-php_fpm_package_pattern: "php{{ version }}-fpm"
-php_extension_package_pattern: "php{{ version }}-{{ extension }}"
-php_fpm_service_pattern: "php{{ version }}-fpm"
+php_package_pattern: "phpversion"
+php_fpm_package_pattern: "phpversion-fpm"
+php_extension_package_pattern: "phpversion-extension"
+php_fpm_service_pattern: "phpversion-fpm"

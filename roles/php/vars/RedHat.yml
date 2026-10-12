@@ -4,9 +4,9 @@
 # EPEL and Remi packages URLs
 php_remi_repo_url: "https://rpms.remirepo.net/enterprise/remi-release-{{ ansible_distribution_major_version }}.rpm"
 
-php_package_pattern: "php{{ version_nodot }}"
-php_fpm_package_pattern: "php{{ version_nodot }}-php-fpm"
-php_fpm_service_pattern: "php{{ version_nodot }}-php-fpm"
+php_package_pattern: "phpversion_nodot"
+php_fpm_package_pattern: "phpversion_nodot-php-fpm"
+php_fpm_service_pattern: "phpversion_nodot-php-fpm"
 
 # Extension mapping if some extensions have special names on RedHat Remi
 # e.g., mysql -> mysqlnd, zip -> pecl-zip
@@ -15,4 +15,4 @@ php_extension_map:
   zip: "pecl-zip"
 
 # Pattern for extension package
-php_extension_package_pattern: "php{{ version_nodot }}-php-{{ extension_mapped }}"
+php_extension_package_pattern: "phpversion_nodot-php-extension_mapped"

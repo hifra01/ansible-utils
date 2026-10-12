@@ -1,0 +1,163 @@
+---
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    # Run every Sunday at 00:00 UTC
+    - cron: "0 0 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  lint:
+    name: Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Yamllint
+        run: yamllint .
+
+      - name: Run Ansible Lint
+        run: ansible-lint
+
+  detect-changes:
+    name: Detect Changed Roles
+    runs-on: ubuntu-latest
+    outputs:
+      apt_mirror: ${{ steps.filter.outputs.apt_mirror }}
+      datetime: ${{ steps.filter.outputs.datetime }}
+      docker: ${{ steps.filter.outputs.docker }}
+      linux_users: ${{ steps.filter.outputs.linux_users }}
+      nginx: ${{ steps.filter.outputs.nginx }}
+      php: ${{ steps.filter.outputs.php }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Check for changes in roles
+        id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            apt_mirror:
+              - 'roles/apt_mirror/**'
+            datetime:
+              - 'roles/datetime/**'
+            docker:
+              - 'roles/docker/**'
+            linux_users:
+              - 'roles/linux_users/**'
+            nginx:
+              - 'roles/nginx/**'
+            php:
+              - 'roles/php/**'
+
+  molecule:
+    name: "Molecule: ${{ matrix.role }} (${{ matrix.distro }})"
+    needs: [lint, detect-changes]
+    runs-on: ubuntu-latest
+    if: needs.lint.result == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        role:
+          - apt_mirror
+          - datetime
+          - docker
+          - linux_users
+          - nginx
+          - php
+        distro:
+          - ubuntu2204
+          - ubuntu2404
+          - debian12
+          - rockylinux9
+          - rockylinux8
+        include:
+          - distro: ubuntu2204
+            image: geerlingguy/docker-ubuntu2204-ansible:latest
+          - distro: ubuntu2404
+            image: geerlingguy/docker-ubuntu2404-ansible:latest
+          - distro: debian12
+            image: geerlingguy/docker-debian12-ansible:latest
+          - distro: rockylinux9
+            image: geerlingguy/docker-rockylinux9-ansible:latest
+          - distro: rockylinux8
+            image: geerlingguy/docker-rockylinux8-ansible:latest
+        exclude:
+          # apt_mirror only supports Debian/Ubuntu family
+          - role: apt_mirror
+            distro: rockylinux9
+          - role: apt_mirror
+            distro: rockylinux8
+
+    steps:
+      - name: Check if this role should be tested
+        id: check
+        run: |
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          case "${{ matrix.role }}" in
+            apt_mirror)  changed="${{ needs.detect-changes.outputs.apt_mirror }}" ;;
+            datetime)    changed="${{ needs.detect-changes.outputs.datetime }}" ;;
+            docker)      changed="${{ needs.detect-changes.outputs.docker }}" ;;
+            linux_users) changed="${{ needs.detect-changes.outputs.linux_users }}" ;;
+            nginx)       changed="${{ needs.detect-changes.outputs.nginx }}" ;;
+            php)         changed="${{ needs.detect-changes.outputs.php }}" ;;
+          esac
+          if [[ "$changed" == "true" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout code
+        if: steps.check.outputs.run == 'true'
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        if: steps.check.outputs.run == 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: "pip"
+
+      - name: Install dependencies
+        if: steps.check.outputs.run == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Molecule Test
+        if: steps.check.outputs.run == 'true'
+        run: |
+          cd roles/${{ matrix.role }}
+          molecule test
+        env:
+          PY_COLORS: "1"
+          ANSIBLE_FORCE_COLOR: "1"
+          MOLECULE_DISTRO: ${{ matrix.image }}

@@ -1,0 +1,28 @@
+---
+- name: Verify
+  hosts: all
+  tasks:
+    - name: Get testuser info
+      ansible.builtin.getent:
+        database: passwd
+        key: testuser
+
+    - name: Verify testuser exists
+      ansible.builtin.assert:
+        that:
+          - "'testuser' in ansible_facts.getent_passwd"
+
+    - name: Check authorized_keys file
+      ansible.builtin.stat:
+        path: /home/testuser/.ssh/authorized_keys
+      register: _ssh_key
+
+    - name: Check sudoers file
+      ansible.builtin.stat:
+        path: /etc/sudoers.d/testuser
+      register: _sudoers_file
+
+    - name: Verify sudoers file exists
+      ansible.builtin.assert:
+        that:
+          - _sudoers_file.stat.exists

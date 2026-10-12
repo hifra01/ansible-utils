@@ -1,0 +1,46 @@
+---
+- name: Prepare
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Install Python 3.9 on RHEL/Rocky 8
+      ansible.builtin.raw: |
+        if [ -f /etc/redhat-release ] && grep -q 'release 8' /etc/redhat-release; then
+          command -v python3.9 >/dev/null 2>&1 || dnf install -y python39
+        fi
+      changed_when: false
+
+    - name: Gather facts after python bootstrap
+      ansible.builtin.setup:
+
+    - name: Update apt cache (Debian/Ubuntu)
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_os_family == 'Debian'
+
+    - name: Ensure cron and curl are installed (Debian/Ubuntu)
+      ansible.builtin.package:
+        name:
+          - cron
+          - curl
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Ensure cronie is installed (RedHat)
+      ansible.builtin.package:
+        name: cronie
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Ensure /var/www/html directory exists
+      ansible.builtin.file:
+        path: /var/www/html
+        state: directory
+        mode: '0755'
+
+    - name: Ensure test index.html exists
+      ansible.builtin.copy:
+        content: "Nginx is running"
+        dest: /var/www/html/index.html
+        mode: '0644'

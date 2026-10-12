@@ -1,0 +1,12 @@
+---
+- name: Verify
+  hosts: all
+  tasks:
+    - name: Verify PHP CLI is installed
+      ansible.builtin.command: php -v
+      register: _php_cli
+      changed_when: false
+
+    - name: Assert PHP CLI version
+      ansible.builtin.assert:
+        that: "'8.2' in _php_cli.stdout"

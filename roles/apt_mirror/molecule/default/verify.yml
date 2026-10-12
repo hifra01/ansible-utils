@@ -1,0 +1,8 @@
+---
+- name: Verify
+  hosts: all
+  tasks:
+    - name: Run apt-get update to verify mirror
+      ansible.builtin.apt:
+        update_cache: true
+      when: ansible_distribution in ['Debian', 'Ubuntu']

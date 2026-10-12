@@ -1,0 +1,12 @@
+---
+- name: Verify
+  hosts: all
+  tasks:
+    - name: Get current timezone
+      ansible.builtin.command: date +%Z
+      register: _tz
+      changed_when: false
+
+    - name: Verify timezone is UTC
+      ansible.builtin.assert:
+        that: "'UTC' in _tz.stdout"

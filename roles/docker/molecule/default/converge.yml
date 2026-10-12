@@ -1,0 +1,7 @@
+---
+- name: Converge
+  hosts: all
+  tasks:
+    - name: "Include hifra01.utils.docker"
+      ansible.builtin.include_role:
+        name: "hifra01.utils.docker"

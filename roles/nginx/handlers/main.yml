@@ -5,20 +5,20 @@
   ansible.builtin.command: nginx -t
   changed_when: false
   listen: "validate and reload nginx"
-  notify: Reload nginx
-
-- name: Validate nginx config for restart
-  ansible.builtin.command: nginx -t
-  changed_when: false
-  listen: "validate and restart nginx"
-  notify: Restart nginx
 
 - name: Reload nginx
   ansible.builtin.service:
     name: nginx
     state: reloaded
+  listen: "validate and reload nginx"
+
+- name: Validate nginx config for restart
+  ansible.builtin.command: nginx -t
+  changed_when: false
+  listen: "validate and restart nginx"
 
 - name: Restart nginx
   ansible.builtin.service:
     name: nginx
     state: restarted
+  listen: "validate and restart nginx"

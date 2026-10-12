@@ -37,3 +37,13 @@
         enabled: true
       vars:
         php_ver_nodot: "{{ php_ver | replace('.', '') }}"
+
+    - name: Ensure /usr/bin/php symlink exists for RedHat
+      ansible.builtin.file:
+        src: "/usr/bin/php{{ php_ver_nodot }}"
+        dest: /usr/bin/php
+        state: link
+        force: false
+      when: ansible_os_family == 'RedHat'
+      vars:
+        php_ver_nodot: "{{ php_ver | replace('.', '') }}"
