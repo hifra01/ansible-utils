@@ -84,9 +84,8 @@ jobs:
       - name: Install dependencies
         if: github.event_name == 'schedule' || steps.changed-files.outputs.any_changed == 'true'
         run: |
-          pip install "molecule-plugins[docker]" "molecule" "ansible-core"
-          ansible-galaxy collection install community.docker
-          ansible-galaxy collection install .
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Run Molecule tests
         if: github.event_name == 'schedule' || steps.changed-files.outputs.any_changed == 'true'
