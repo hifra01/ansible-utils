@@ -215,6 +215,11 @@ done
 
 - Default branch: `main`. Work on `feature/<name>` branches and open PRs.
 - Use Conventional Commits: `feat:`, `fix:`, `chore:`, optionally scoped — `feat(apt_mirror): …`.
+- **Use the GitHub CLI (`gh`) for all GitHub interactions** — PRs, issues, releases, CI runs
+  (e.g. `gh pr create`, `gh issue list`, `gh run watch`, `gh release create`).
+  Never use `curl` against the API or ask the user to do something in the web UI.
+- **Never `git commit` or `git push` unless the user explicitly instructs it.** Leave changes
+  in the working tree; the user decides when and what to commit.
 
 ## Do / Don't
 
