@@ -20,12 +20,48 @@ requirements.txt        # Python dev/test tooling (ansible-core, molecule, linte
 .ansible-lint           # profile: min, with a warn_list
 .yamllint               # extends default, line-length 160, octal values forbidden
 .github/workflows/ci.yml# Lint + Molecule matrix (role x distro)
+.specify/               # GitHub Spec-Kit config, constitution, scripts, and templates
+.agents/skills/         # Agent skills for the Spec-Kit workflow (speckit-*)
+specs/                  # Feature specifications, plans, and task lists (specs/<NNN-feature>/)
 plugins/                # Placeholder only (no custom plugins yet)
 docs/                   # Empty
 roles/<role>/           # One directory per role (see below)
 scratchpad/             # GITIGNORED planning notes/prompts (mostly Indonesian)
 .ansible/               # GITIGNORED – Molecule's installed copy of this collection; never edit
 ```
+
+## Spec-Driven Development (Spec-Kit)
+
+This project uses **Spec-Driven Development (SDD)** powered by [GitHub Spec-Kit](https://github.com/github/spec-kit)
+(configured in `.specify/` with agent skills in `.agents/skills/speckit-*`).
+
+### When to use SDD
+- **Required**: Creating a new role, adding significant features/variables to an existing role,
+  or making breaking/architectural changes across the collection.
+- **Optional**: Trivial bug fixes, typo/documentation updates, or minor CI/linter adjustments
+  (only skip SDD when the user explicitly requests a direct fix).
+
+### SDD Lifecycle & Skills
+Always read and follow the corresponding skill in `.agents/skills/<skill>/SKILL.md` at each phase,
+and respect `.specify/memory/constitution.md` as the governing project principles:
+
+1. **Constitution (`speckit-constitution`)** — Maintain project-wide governance principles in
+   `.specify/memory/constitution.md`.
+2. **Specify (`speckit-specify`)** — Run `.specify/scripts/bash/create-new-feature.sh` (via the skill)
+   to create the feature branch (`<NNN-short-name>`) and `specs/<NNN-short-name>/spec.md`. Define
+   supported OS families, role inputs/variables, expected system state, and idempotency guarantees.
+3. **Clarify (`speckit-clarify`)** — Resolve underspecified requirements (e.g., OS support scope,
+   default values, service reload vs. restart behavior, edge cases) before planning.
+4. **Plan (`speckit-plan`)** — Generate `plan.md` covering role structure (`defaults/`, `vars/`,
+   `tasks/`, `handlers/`, `templates/`), OS-specific dispatch (`Debian.yml`, `RedHat.yml`), and
+   Molecule verification strategy across target distros.
+5. **Tasks & Checklist (`speckit-tasks`, `speckit-checklist`)** — Generate dependency-ordered tasks
+   in `tasks.md` (and optional quality checklists in `checklists/`).
+6. **Analyze (`speckit-analyze`)** — Run cross-artifact consistency analysis across `spec.md`,
+   `plan.md`, `tasks.md`, and `.specify/memory/constitution.md` before writing code.
+7. **Implement & Converge (`speckit-implement`, `speckit-converge`)** — Execute tasks in order
+   (scaffold role/scenario, implement tasks, register in CI, run linters and Molecule tests). Use
+   `speckit-converge` to audit remaining unbuilt work against the spec if implementation is resumed.
 
 ### Roles
 
@@ -57,10 +93,11 @@ molecule init scenario default
 ```
 
 After scaffolding:
-- Replace the generated `molecule/default/molecule.yml` with the shared one from an existing role
-  (e.g. `roles/datetime/molecule/default/molecule.yml`) — it must stay identical across roles.
-- Delete any generated `create.yml`/`destroy.yml`
-  (the Docker driver from `molecule-plugins[docker]` handles instance lifecycle).
+- Start from an existing role's `molecule/default/molecule.yml` (e.g. `roles/datetime/molecule/default/molecule.yml`)
+  as a baseline, and customize the scenario (`molecule.yml`, `prepare.yml`, `converge.yml`, `verify.yml`) as needed
+  for the role's requirements.
+- Delete any generated `create.yml`/`destroy.yml` unless the role's scenario specifically requires custom instance
+  lifecycle management (the Docker driver from `molecule-plugins[docker]` handles instance lifecycle by default).
 - Write a `prepare.yml` tailored to the role's test scenario (prerequisites, fixtures, extra
   packages). Always keep the RHEL 8 Python bootstrap tasks from an existing role's `prepare.yml`
   at the top (see Testing), then add role-specific setup below them.
@@ -172,12 +209,14 @@ done
 
 ### Scenario files
 
-- Each role has `molecule/default/` with `molecule.yml`, `prepare.yml`, `converge.yml`, `verify.yml`.
-  New scenarios are created with `molecule init scenario <name>` from inside the role directory.
-- **Only `molecule.yml` is shared.** `prepare.yml`, `converge.yml`, and `verify.yml` are
-  role- and scenario-specific; write them to fit what the role does and what the scenario tests.
-- `molecule.yml` is **identical across all roles** (Docker driver, privileged systemd container,
-  `${MOLECULE_DISTRO}` image, `become_method: su`). Keep it in sync; overwrite the generated one for new roles.
+- Each role has `molecule/default/` with `molecule.yml`, `prepare.yml`, `converge.yml`, `verify.yml`
+  (and optional extra scenarios if needed). New scenarios are created with `molecule init scenario <name>`
+  from inside the role directory.
+- **Scenarios are customizable per role.** `molecule.yml`, `prepare.yml`, `converge.yml`, and `verify.yml`
+  can all be modified according to the role's specific requirements.
+- Use an existing `molecule.yml` (Docker driver, privileged systemd container, `${MOLECULE_DISTRO}` image,
+  `become_method: su`) as the baseline so the CI distro matrix works, then customize container settings,
+  volumes, capabilities, environment, or test sequence if the role requires it.
 - `prepare.yml` sets up anything the scenario needs before converge (e.g. nginx installs `cron`/`cronie`,
   test fixtures, pre-existing users/files to exercise idempotency or cleanup).
 - `converge.yml` includes the role by FQCN (`hifra01.utils.<role>`) and sets scenario-specific vars.
@@ -198,22 +237,30 @@ done
 
 ## Adding a New Role — Checklist
 
-1. From the repo root, run `ansible-galaxy role init --init-path roles <role>` (role must be in `roles/`).
+1. **Run the Spec-Kit workflow first**: use `speckit-specify` → `speckit-clarify` → `speckit-plan` →
+   `speckit-tasks` → `speckit-analyze` to create `specs/<NNN-feature>/` (`spec.md`, `plan.md`, `tasks.md`)
+   before scaffolding or writing role code.
+2. Execute implementation via `speckit-implement`: from the repo root, run
+   `ansible-galaxy role init --init-path roles <role>` (role must be in `roles/`).
    Keep the SPDX headers it generates.
-2. Prefix variables with `<role>_`; add a platform `assert` at the top of `tasks/main.yml`.
-3. Write `README.md` and fill in `meta/main.yml`.
-4. From `roles/<role>/`, run `molecule init scenario default`, then replace `molecule.yml` with the
-   shared version, drop generated `create.yml`/`destroy.yml`, and write role-specific `prepare.yml`
-   (keeping the RHEL 8 bootstrap), `converge.yml`, and `verify.yml` for the test scenario.
-5. Register it in `.github/workflows/ci.yml` in **all four** places:
+3. Prefix variables with `<role>_`; add a platform `assert` at the top of `tasks/main.yml`.
+4. Write `README.md` and fill in `meta/main.yml` (and add the role to the table in `AGENTS.md`).
+5. From `roles/<role>/`, run `molecule init scenario default`, drop generated `create.yml`/`destroy.yml`
+   (unless custom lifecycle tasks are needed), and configure `molecule.yml` (using an existing role's
+   `molecule.yml` as baseline), `prepare.yml` (keeping the RHEL 8 bootstrap), `converge.yml`, and
+   `verify.yml` according to the role's requirements.
+6. Register it in `.github/workflows/ci.yml` in **all four** places:
    `detect-changes.outputs`, the `paths-filter` `filters`, `molecule.strategy.matrix.role`,
    and the `case` statement in the "Check if this role should be tested" step.
    Add `exclude` entries for unsupported distros.
-6. Run `yamllint .`, `ansible-lint`, and `molecule test` on all five distro images (minus unsupported ones).
+7. Run `yamllint .`, `ansible-lint`, and `molecule test` on all five distro images (minus unsupported ones),
+   marking completed tasks in `specs/<NNN-feature>/tasks.md`.
 
 ## Git Workflow
 
-- Default branch: `main`. Work on `feature/<name>` branches and open PRs.
+- Default branch: `main`.
+- For Spec-Kit features, work on the sequential branch created by `.specify/scripts/bash/create-new-feature.sh`
+  (`<NNN-short-name>`, matching `specs/<NNN-short-name>/`). For standalone non-SDD hotfixes, use `feature/<name>` or `fix/<name>`.
 - Use Conventional Commits: `feat:`, `fix:`, `chore:`, optionally scoped — `feat(apt_mirror): …`.
 - **Use the GitHub CLI (`gh`) for all GitHub interactions** — PRs, issues, releases, CI runs
   (e.g. `gh pr create`, `gh issue list`, `gh run watch`, `gh release create`).
@@ -223,8 +270,11 @@ done
 
 ## Do / Don't
 
+- ✅ Follow the Spec-Kit workflow (`specify` → `plan` → `tasks` → `implement`) for new roles and non-trivial changes.
 - ✅ Keep changes idempotent and multi-OS; test on both Debian- and RHEL-family images.
 - ✅ Bump `version` in `galaxy.yml` when releasing collection changes.
+- ❌ Don't skip `spec.md`, `plan.md`, and `tasks.md` when building new roles or major role features.
+- ❌ Don't hand-edit Spec-Kit engine files under `.specify/scripts/` or `.specify/templates/`; use `speckit-constitution` to update `.specify/memory/constitution.md`.
 - ❌ Don't edit anything under `.ansible/` (generated) or commit `scratchpad/`, `.venv/`, `.vscode/`.
 - ❌ Don't use short module names, unquoted octal modes, or unnamed tasks.
 - ❌ Don't hand-craft role/scenario skeletons — use `ansible-galaxy role init --init-path roles` and
