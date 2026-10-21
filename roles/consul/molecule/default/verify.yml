@@ -1,0 +1,88 @@
+---
+- name: Verify
+  hosts: all
+  tasks:
+    - name: Check if Consul service is running
+      ansible.builtin.service:
+        name: consul
+        state: started
+      check_mode: true
+      register: _consul_service
+
+    - name: Assert Consul service is running
+      ansible.builtin.assert:
+        that:
+          - not _consul_service.changed
+        fail_msg: "Consul service is not running."
+
+    - name: Check main agent configuration file
+      ansible.builtin.stat:
+        path: /etc/consul.d/consul.hcl
+      register: _consul_hcl_stat
+
+    - name: Assert main configuration file exists with proper mode
+      ansible.builtin.assert:
+        that:
+          - _consul_hcl_stat.stat.exists
+          - _consul_hcl_stat.stat.mode == '0640'
+        fail_msg: "/etc/consul.d/consul.hcl does not exist or has incorrect permissions."
+
+    - name: Check advertised service files exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: _service_file_stat
+      loop:
+        - /etc/consul.d/service-web-80.json
+        - /etc/consul.d/service-redis.json
+
+    - name: Assert advertised service files exist with proper mode
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.mode == '0640'
+      loop: "{{ _service_file_stat.results }}"
+
+    - name: Check stale service file was purged
+      ansible.builtin.stat:
+        path: /etc/consul.d/service-stale.json
+      register: _stale_service_stat
+
+    - name: Assert stale service file is absent
+      ansible.builtin.assert:
+        that:
+          - not _stale_service_stat.stat.exists
+        fail_msg: "/etc/consul.d/service-stale.json was not purged."
+
+    - name: Validate Consul configuration directory
+      ansible.builtin.command: consul validate /etc/consul.d
+      changed_when: false
+
+    - name: Check Consul members status
+      ansible.builtin.command: consul members
+      register: _consul_members
+      changed_when: false
+
+    - name: Assert Consul node is alive in server mode
+      ansible.builtin.assert:
+        that:
+          - "'alive' in _consul_members.stdout"
+          - "'server' in _consul_members.stdout"
+        fail_msg: "Consul members does not show node as alive server."
+
+    - name: Query local agent registered services
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8500/v1/agent/services
+        return_content: true
+      register: _agent_services
+      retries: 5
+      delay: 2
+      until: _agent_services.status == 200
+
+    - name: Assert registered services match definition
+      ansible.builtin.assert:
+        that:
+          - "'web-80' in _agent_services.json"
+          - "_agent_services.json['web-80']['Port'] == 80"
+          - "'redis' in _agent_services.json"
+          - "_agent_services.json['redis']['Port'] == 6379"
+        fail_msg: "Advertised services were not registered in Consul agent catalog."

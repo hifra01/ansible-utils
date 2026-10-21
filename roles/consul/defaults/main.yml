@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: MIT-0
+---
+# defaults file for consul
+
+# Operational mode for this Consul node: "server" or "client"
+consul_mode: "client"
+
+# Number of expected server nodes for Raft cluster bootstrap (only used when consul_mode == "server")
+consul_bootstrap_expect: 1
+
+# Consul datacenter name
+consul_datacenter: "dc1"
+
+# Node name registered in the Consul catalog
+consul_node_name: "{{ inventory_hostname }}"
+
+# Directories and system ownership
+consul_config_dir: "/etc/consul.d"
+consul_data_dir: "/opt/consul"
+consul_user: "consul"
+consul_group: "consul"
+
+# Network bindings
+consul_bind_addr: "0.0.0.0"
+consul_advertise_addr: "{{ ansible_facts['default_ipv4']['address'] | default('127.0.0.1') }}"
+consul_client_addr: "127.0.0.1"
+
+# UI & logging
+consul_ui: false
+consul_log_level: "INFO"
+
+# Cluster join & security
+consul_retry_join: []
+consul_encrypt: ""
+
+# Additional arbitrary top-level Consul configuration (rendered to /etc/consul.d/extra.json when non-empty)
+consul_extra_config: {}
+
+# Services to advertise on this host
+consul_services: []
+
+# Remove unmanaged service-*.json files from consul_config_dir
+consul_services_purge: true
+
+# Package & repository settings
+consul_package_name: "consul"
+consul_package_state: "present"
+consul_apt_repo_url: "https://apt.releases.hashicorp.com"
+consul_apt_gpg_url: "https://apt.releases.hashicorp.com/gpg"
+consul_apt_arch_map:
+  x86_64: amd64
+  aarch64: arm64
+  armv7l: armhf
+consul_apt_arch: "{{ consul_apt_arch_map[ansible_facts['architecture']] | default(ansible_facts['architecture']) }}"
+consul_rhel_repo_url: "https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo"

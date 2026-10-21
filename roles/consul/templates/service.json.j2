@@ -1,0 +1,17 @@
+{% set svc = {'name': consul_service.name, 'id': (consul_service.id | default(consul_service.name))} %}
+{% if consul_service.port is defined %}
+{%   set _ = svc.update({'port': consul_service.port | int}) %}
+{% endif %}
+{% if consul_service.address is defined %}
+{%   set _ = svc.update({'address': consul_service.address}) %}
+{% endif %}
+{% if consul_service.tags is defined %}
+{%   set _ = svc.update({'tags': consul_service.tags}) %}
+{% endif %}
+{% if consul_service.meta is defined %}
+{%   set _ = svc.update({'meta': consul_service.meta}) %}
+{% endif %}
+{% if consul_service.checks is defined %}
+{%   set _ = svc.update({'checks': consul_service.checks}) %}
+{% endif %}
+{{ {'service': svc} | to_nice_json }}

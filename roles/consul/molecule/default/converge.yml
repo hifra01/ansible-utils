@@ -1,0 +1,31 @@
+---
+- name: Converge
+  hosts: all
+  tasks:
+    - name: "Include hifra01.utils.consul"
+      ansible.builtin.include_role:
+        name: "hifra01.utils.consul"
+      vars:
+        consul_mode: "server"
+        consul_bootstrap_expect: 1
+        consul_ui: true
+        consul_client_addr: "0.0.0.0"
+        consul_services:
+          - name: "web"
+            id: "web-80"
+            port: 80
+            tags:
+              - "http"
+              - "production"
+            meta:
+              version: "1.0.0"
+            checks:
+              - id: "web-tcp"
+                name: "TCP on port 80"
+                tcp: "127.0.0.1:80"
+                interval: "10s"
+                timeout: "2s"
+          - name: "redis"
+            port: 6379
+            tags:
+              - "cache"

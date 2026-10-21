@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for consul RedHat repository setup
+
+- name: Ensure RedHat prerequisite packages are installed
+  ansible.builtin.package:
+    name: "{{ consul_prerequisite_packages }}"
+    state: present
+
+- name: Add HashiCorp YUM/DNF repository
+  ansible.builtin.get_url:
+    url: "{{ consul_rhel_repo_url }}"
+    dest: /etc/yum.repos.d/hashicorp.repo
+    mode: '0644'

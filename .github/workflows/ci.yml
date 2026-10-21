@@ -47,6 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       apt_mirror: ${{ steps.filter.outputs.apt_mirror }}
+      consul: ${{ steps.filter.outputs.consul }}
       datetime: ${{ steps.filter.outputs.datetime }}
       docker: ${{ steps.filter.outputs.docker }}
       linux_users: ${{ steps.filter.outputs.linux_users }}
@@ -63,6 +64,8 @@ jobs:
           filters: |
             apt_mirror:
               - 'roles/apt_mirror/**'
+            consul:
+              - 'roles/consul/**'
             datetime:
               - 'roles/datetime/**'
             docker:
@@ -84,6 +87,7 @@ jobs:
       matrix:
         role:
           - apt_mirror
+          - consul
           - datetime
           - docker
           - linux_users
@@ -123,6 +127,7 @@ jobs:
           fi
           case "${{ matrix.role }}" in
             apt_mirror)  changed="${{ needs.detect-changes.outputs.apt_mirror }}" ;;
+            consul)      changed="${{ needs.detect-changes.outputs.consul }}" ;;
             datetime)    changed="${{ needs.detect-changes.outputs.datetime }}" ;;
             docker)      changed="${{ needs.detect-changes.outputs.docker }}" ;;
             linux_users) changed="${{ needs.detect-changes.outputs.linux_users }}" ;;

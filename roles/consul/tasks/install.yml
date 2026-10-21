@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for consul installation
+
+- name: Install HashiCorp Consul package
+  ansible.builtin.package:
+    name: "{{ consul_package_name }}"
+    state: "{{ consul_package_state }}"
+
+- name: Ensure Consul configuration and data directories exist with proper ownership
+  ansible.builtin.file:
+    path: "{{ consul_dir }}"
+    state: directory
+    owner: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+    mode: '0750'
+  loop:
+    - "{{ consul_config_dir }}"
+    - "{{ consul_data_dir }}"
+  loop_control:
+    loop_var: consul_dir
