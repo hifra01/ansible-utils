@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for consul
+
+- name: Validate supported platform
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] in ['Debian', 'RedHat']
+    fail_msg: "This role only supports Debian and RedHat family systems."
+
+- name: Validate role inputs
+  ansible.builtin.assert:
+    that:
+      - consul_mode in ['server', 'client']
+      - (consul_mode == 'client') or (consul_bootstrap_expect | int >= 1)
+    fail_msg: "consul_mode must be 'server' or 'client', and consul_bootstrap_expect must be >= 1 in server mode."
+
+- name: Load OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_facts['os_family'] }}.yml"
+
+- name: Setup HashiCorp repository
+  ansible.builtin.include_tasks: "setup-{{ ansible_facts['os_family'] }}.yml"
+
+- name: Install Consul package
+  ansible.builtin.include_tasks: install.yml
+
+- name: Configure advertised services
+  ansible.builtin.include_tasks: services.yml
+
+- name: Configure Consul agent
+  ansible.builtin.include_tasks: configure.yml

@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: MIT-0
+---
+galaxy_info:
+  author: Hilman F. Rakhmad
+  description: Ansible role to install and configure HashiCorp Consul in server or client mode with per-node advertised service definitions.
+  company: hifra.dev
+  license: MIT
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+
+  galaxy_tags:
+    - consul
+    - hashicorp
+    - discovery
+    - clustering
+    - system
+
+dependencies: []

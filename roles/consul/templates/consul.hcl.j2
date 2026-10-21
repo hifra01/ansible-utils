@@ -1,0 +1,28 @@
+# Managed by Ansible (hifra01.utils.consul)
+datacenter = "{{ consul_datacenter }}"
+node_name = "{{ consul_node_name }}"
+data_dir = "{{ consul_data_dir }}"
+log_level = "{{ consul_log_level }}"
+
+server = {{ 'true' if consul_mode == 'server' else 'false' }}
+{% if consul_mode == 'server' %}
+bootstrap_expect = {{ consul_bootstrap_expect }}
+{% endif %}
+
+bind_addr = "{{ consul_bind_addr }}"
+{% if consul_advertise_addr | length > 0 %}
+advertise_addr = "{{ consul_advertise_addr }}"
+{% endif %}
+client_addr = "{{ consul_client_addr }}"
+
+ui_config {
+  enabled = {{ 'true' if consul_ui else 'false' }}
+}
+
+{% if consul_retry_join | length > 0 %}
+retry_join = {{ consul_retry_join | to_json }}
+{% endif %}
+
+{% if consul_encrypt | length > 0 %}
+encrypt = "{{ consul_encrypt }}"
+{% endif %}

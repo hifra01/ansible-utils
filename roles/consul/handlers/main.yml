@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: MIT-0
+---
+# handlers file for consul
+
+- name: Validate consul configuration for reload
+  ansible.builtin.command: "consul validate {{ consul_config_dir }}"
+  changed_when: false
+  listen: "validate and reload consul"
+
+- name: Reload consul
+  ansible.builtin.service:
+    name: "{{ consul_service_name }}"
+    state: reloaded
+  listen: "validate and reload consul"
+
+- name: Validate consul configuration for restart
+  ansible.builtin.command: "consul validate {{ consul_config_dir }}"
+  changed_when: false
+  listen: "validate and restart consul"
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  listen: "validate and restart consul"
+
+- name: Restart consul
+  ansible.builtin.service:
+    name: "{{ consul_service_name }}"
+    state: restarted
+  listen: "validate and restart consul"

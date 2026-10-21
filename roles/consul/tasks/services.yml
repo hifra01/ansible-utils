@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for consul advertised services
+
+- name: Validate advertised service items
+  ansible.builtin.assert:
+    that:
+      - consul_service.name is defined
+      - consul_service.name | length > 0
+      - (consul_service.port is not defined) or (consul_service.port | int >= 1 and consul_service.port | int <= 65535)
+    fail_msg: "Each item in consul_services must define a non-empty name and a valid port (1-65535) if specified."
+  loop: "{{ consul_services }}"
+  loop_control:
+    loop_var: consul_service
+
+- name: Render advertised service definition files
+  ansible.builtin.template:
+    src: service.json.j2
+    dest: "{{ consul_config_dir }}/service-{{ consul_service.id | default(consul_service.name) }}.json"
+    owner: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+    mode: '0640'
+  loop: "{{ consul_services }}"
+  loop_control:
+    loop_var: consul_service
+  notify: "validate and reload consul"
+
+- name: Determine managed service configuration paths
+  ansible.builtin.set_fact:
+    _consul_managed_service_files: >-
+      {%- set paths = [] -%}
+      {%- for svc in consul_services -%}
+      {%-   set sid = svc.id | default(svc.name) -%}
+      {%-   set _ = paths.append(consul_config_dir ~ '/service-' ~ sid ~ '.json') -%}
+      {%- endfor -%}
+      {{ paths }}
+  when: consul_services_purge | bool
+
+- name: Find existing service configuration files
+  ansible.builtin.find:
+    paths: "{{ consul_config_dir }}"
+    patterns: "service-*.json"
+  register: _consul_existing_service_files
+  when: consul_services_purge | bool
+
+- name: Purge unmanaged service configuration files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ _consul_existing_service_files.files | default([]) }}"
+  when:
+    - consul_services_purge | bool
+    - item.path not in _consul_managed_service_files
+  loop_control:
+    label: "{{ item.path }}"
+  notify: "validate and reload consul"
