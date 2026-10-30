@@ -1,0 +1,129 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for percona_mysql configuration and security bootstrap
+
+- name: Ensure MySQL service is started and enabled
+  ansible.builtin.service:
+    name: "{{ percona_mysql_service_name }}"
+    state: started
+    enabled: true
+
+- name: Wait for MySQL socket to become available
+  ansible.builtin.wait_for:
+    path: "{{ percona_mysql_socket }}"
+    state: present
+    timeout: 60
+
+- name: Check if root already authenticates with configured password
+  ansible.builtin.command:
+    cmd: "mysql --no-defaults -u root -p{{ percona_mysql_root_password | quote }} -e \"SELECT 1;\""
+  register: _percona_mysql_target_pass_auth
+  changed_when: false
+  failed_when: false
+
+- name: Bootstrap or update root password when target password does not authenticate
+  when: _percona_mysql_target_pass_auth.rc != 0
+  block:
+    - name: Check if /root/.my.cnf authenticates
+      ansible.builtin.command:
+        cmd: mysql --defaults-file=/root/.my.cnf -e "SELECT 1;"
+      register: _percona_mysql_existing_my_cnf
+      changed_when: false
+      failed_when: false
+
+    - name: Update root password using existing /root/.my.cnf
+      ansible.builtin.command:
+        cmd: >-
+          mysql --defaults-file=/root/.my.cnf -e
+          "SET GLOBAL super_read_only = OFF;
+           SET GLOBAL read_only = OFF;
+           ALTER USER 'root'@'localhost' IDENTIFIED BY {{ percona_mysql_root_password | quote }};
+           FLUSH PRIVILEGES;"
+      when: _percona_mysql_existing_my_cnf.rc == 0
+      changed_when: true
+
+    - name: Check if MySQL connects via socket without password
+      ansible.builtin.command:
+        cmd: mysql --no-defaults -u root -e "SELECT 1;"
+      register: _percona_mysql_socket_auth
+      changed_when: false
+      failed_when: false
+      when: _percona_mysql_existing_my_cnf.rc != 0
+
+    - name: Set root password via socket auth on Debian/Ubuntu
+      ansible.builtin.command:
+        cmd: >-
+          mysql --no-defaults -u root -e
+          "ALTER USER 'root'@'localhost' IDENTIFIED BY {{ percona_mysql_root_password | quote }}; FLUSH PRIVILEGES;"
+      when:
+        - _percona_mysql_existing_my_cnf.rc != 0
+        - _percona_mysql_socket_auth is defined
+        - _percona_mysql_socket_auth.rc == 0
+      changed_when: true
+
+    - name: Handle temporary root password on RedHat family
+      when:
+        - _percona_mysql_existing_my_cnf.rc != 0
+        - _percona_mysql_socket_auth is defined
+        - _percona_mysql_socket_auth.rc != 0
+      block:
+        - name: Extract temporary root password from log
+          ansible.builtin.shell:
+            cmd: "grep 'temporary password' {{ percona_mysql_error_log_file }} | tail -n 1 | awk '{print $NF}'"
+          register: _percona_mysql_temp_pass
+          changed_when: false
+
+        - name: Set root password using temporary password
+          ansible.builtin.command:
+            cmd: >-
+              mysql --no-defaults --connect-expired-password -u root -p{{ _percona_mysql_temp_pass.stdout | quote }} -e
+              "ALTER USER 'root'@'localhost' IDENTIFIED BY {{ percona_mysql_root_password | quote }}; FLUSH PRIVILEGES;"
+          when: _percona_mysql_temp_pass.stdout | length > 0
+          changed_when: true
+
+- name: Deploy /root/.my.cnf credentials file
+  ansible.builtin.template:
+    src: root-my.cnf.j2
+    dest: /root/.my.cnf
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Secure MySQL installation
+  when: percona_mysql_secure_installation
+  block:
+    - name: Check for anonymous MySQL users
+      ansible.builtin.command:
+        cmd: mysql --defaults-file=/root/.my.cnf -N -s -e "SELECT COUNT(*) FROM mysql.user WHERE User='';"
+      register: _percona_mysql_anon_users
+      changed_when: false
+
+    - name: Remove anonymous MySQL users
+      ansible.builtin.command:
+        cmd: mysql --defaults-file=/root/.my.cnf -e "DELETE FROM mysql.user WHERE User=''; FLUSH PRIVILEGES;"
+      when: _percona_mysql_anon_users.stdout | int > 0
+      changed_when: true
+
+    - name: Check for test database
+      ansible.builtin.command:
+        cmd: mysql --defaults-file=/root/.my.cnf -N -s -e "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = 'test';"
+      register: _percona_mysql_test_db
+      changed_when: false
+
+    - name: Remove test database
+      ansible.builtin.command:
+        cmd: mysql --defaults-file=/root/.my.cnf -e "DROP DATABASE IF EXISTS test; FLUSH PRIVILEGES;"
+      when: _percona_mysql_test_db.stdout | int > 0
+      changed_when: true
+
+- name: Render Percona MySQL drop-in configuration
+  ansible.builtin.template:
+    src: 99-percona-managed.cnf.j2
+    dest: "{{ percona_mysql_dropin_config_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: "validate and restart mysql"
+
+- name: Flush handlers to apply configuration
+  ansible.builtin.meta: flush_handlers

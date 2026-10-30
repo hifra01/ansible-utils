@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for percona_mysql database management
+
+- name: Manage application databases
+  ansible.builtin.include_tasks: database-item.yml
+  loop: "{{ percona_mysql_databases }}"
+  loop_control:
+    loop_var: percona_mysql_db

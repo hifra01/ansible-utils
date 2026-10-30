@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: MIT-0
+---
+galaxy_info:
+  author: Hilman F. Rakhmad
+  description: Ansible role to install and manage Percona Server for MySQL in master or replica mode with GTID replication.
+  company: hifra.dev
+  license: MIT
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+
+  galaxy_tags:
+    - database
+    - mysql
+    - percona
+    - replication
+    - clustering
+
+dependencies: []

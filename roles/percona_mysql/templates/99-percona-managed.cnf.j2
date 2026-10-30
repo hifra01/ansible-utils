@@ -1,0 +1,22 @@
+# Managed by Ansible (hifra01.utils.percona_mysql)
+[mysqld]
+bind-address = {{ percona_mysql_bind_address }}
+port = {{ percona_mysql_port }}
+server-id = {{ percona_mysql_server_id }}
+gtid_mode = {{ percona_mysql_gtid_mode }}
+enforce_gtid_consistency = {{ percona_mysql_enforce_gtid_consistency }}
+log_bin = {{ percona_mysql_log_bin }}
+binlog_format = {{ percona_mysql_binlog_format }}
+binlog_expire_logs_seconds = {{ percona_mysql_binlog_expire_logs_seconds }}
+innodb_buffer_pool_size = {{ percona_mysql_innodb_buffer_pool_size }}
+max_connections = {{ percona_mysql_max_connections }}
+{% if percona_mysql_role == 'master' %}
+read_only = OFF
+super_read_only = OFF
+{% else %}
+read_only = ON
+super_read_only = ON
+{% endif %}
+{% for key, value in percona_mysql_extra_mysqld_config.items() %}
+{{ key }} = {{ value }}
+{% endfor %}

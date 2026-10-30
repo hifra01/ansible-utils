@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: MIT-0
+---
+# defaults file for percona_mysql
+
+# Percona Server for MySQL release series ("8.4", "ps-84-lts", "8.0", "ps-80")
+percona_mysql_version: "8.4"
+percona_mysql_version_map:
+  "8.4": "ps-84-lts"
+  "8.4-lts": "ps-84-lts"
+  "ps-84-lts": "ps-84-lts"
+  "8.0": "ps-80"
+  "ps-80": "ps-80"
+percona_mysql_repo_product: "{{ percona_mysql_version_map[percona_mysql_version | string] | default(percona_mysql_version) }}"
+
+# Operational role for this MySQL node: "master" or "replica"
+percona_mysql_role: "master"
+
+# Unique MySQL server ID (positive integer >= 1)
+percona_mysql_server_id: 1
+
+# Network settings
+percona_mysql_bind_address: "0.0.0.0"
+percona_mysql_port: 3306
+
+# Root authentication & security hardening
+percona_mysql_root_password: "changeme_root_password"
+percona_mysql_secure_installation: true
+
+# Binary logging & GTID settings
+percona_mysql_gtid_mode: "ON"
+percona_mysql_enforce_gtid_consistency: "ON"
+percona_mysql_log_bin: "mysql-bin"
+percona_mysql_binlog_format: "ROW"
+percona_mysql_binlog_expire_logs_seconds: 604800
+
+# InnoDB & connection tuning
+percona_mysql_innodb_buffer_pool_size: "128M"
+percona_mysql_max_connections: 151
+
+# Additional [mysqld] configuration directives
+percona_mysql_extra_mysqld_config: {}
+
+# Replication credentials (created on master; used by replica to connect to master)
+percona_mysql_replication_user: ""
+percona_mysql_replication_password: ""
+percona_mysql_replication_host: "%"
+
+# Replica source connection settings (used when percona_mysql_role == "replica")
+percona_mysql_source_host: ""
+percona_mysql_source_port: 3306
+percona_mysql_replica_start_replication: true
+
+# Application databases & users (provisioned when percona_mysql_role == "master")
+percona_mysql_databases: []
+percona_mysql_users: []
+
+# Package & repository URLs
+percona_mysql_package_state: "present"
+percona_mysql_apt_release_deb_url: "https://repo.percona.com/apt/percona-release_latest.generic_all.deb"
+percona_mysql_yum_release_rpm_url: "https://repo.percona.com/yum/percona-release-latest.noarch.rpm"

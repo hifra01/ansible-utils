@@ -1,0 +1,131 @@
+---
+- name: Verify Common Configuration
+  hosts: all
+  vars:
+    _percona_service_name: "{{ (ansible_facts['os_family'] == 'Debian') | ternary('mysql', 'mysqld') }}"
+  tasks:
+    - name: Check if MySQL service is running
+      ansible.builtin.service:
+        name: "{{ _percona_service_name }}"
+        state: started
+      check_mode: true
+      register: _mysql_service
+
+    - name: Assert MySQL service is running
+      ansible.builtin.assert:
+        that:
+          - not _mysql_service.changed
+        fail_msg: "MySQL service is not running."
+
+    - name: Check /root/.my.cnf exists and permissions
+      ansible.builtin.stat:
+        path: /root/.my.cnf
+      register: _my_cnf_stat
+
+    - name: Assert /root/.my.cnf exists with mode 0600
+      ansible.builtin.assert:
+        that:
+          - _my_cnf_stat.stat.exists
+          - _my_cnf_stat.stat.mode == '0600'
+        fail_msg: "/root/.my.cnf does not exist or has incorrect permissions."
+
+    - name: Run mysqld --validate-config
+      ansible.builtin.command: /usr/sbin/mysqld --validate-config
+      changed_when: false
+
+- name: Verify MySQL Master Node
+  hosts: mysql-master
+  tasks:
+    - name: Query master global variables
+      ansible.builtin.command:
+        cmd: mysql --defaults-file=/root/.my.cnf -N -s -e "SELECT @@read_only, @@super_read_only, @@server_id, @@gtid_mode;"
+      register: _master_vars
+      changed_when: false
+
+    - name: Assert master global variables
+      ansible.builtin.assert:
+        that:
+          - _master_vars.stdout.split()[0] == '0'
+          - _master_vars.stdout.split()[1] == '0'
+          - _master_vars.stdout.split()[2] == '1'
+          - _master_vars.stdout.split()[3] == 'ON'
+        fail_msg: "Master global variables do not match expected values: {{ _master_vars.stdout }}"
+
+    - name: Verify application database exists
+      ansible.builtin.command:
+        cmd: mysql --defaults-file=/root/.my.cnf -N -s -e "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = 'app_db';"
+      register: _master_db
+      changed_when: false
+
+    - name: Assert application database exists
+      ansible.builtin.assert:
+        that:
+          - _master_db.stdout | int == 1
+        fail_msg: "Application database 'app_db' was not created."
+
+    - name: Verify app_user authentication and access
+      ansible.builtin.command:
+        cmd: mysql -u app_user -pAppUserPassword!123 -e "SELECT 1;"
+      changed_when: false
+
+    - name: Create test table and insert replication record on master
+      ansible.builtin.command:
+        cmd: >-
+          mysql --defaults-file=/root/.my.cnf -e
+          "CREATE TABLE IF NOT EXISTS app_db.t_repl (id INT PRIMARY KEY, val VARCHAR(50));
+           REPLACE INTO app_db.t_repl VALUES (1, 'replicated_data_probe');"
+      changed_when: true
+
+- name: Verify MySQL Replica Node and Live Replication
+  hosts: mysql-replica
+  tasks:
+    - name: Query replica global variables
+      ansible.builtin.command:
+        cmd: mysql --defaults-file=/root/.my.cnf -N -s -e "SELECT @@read_only, @@super_read_only, @@server_id, @@gtid_mode;"
+      register: _replica_vars
+      changed_when: false
+
+    - name: Assert replica global variables
+      ansible.builtin.assert:
+        that:
+          - _replica_vars.stdout.split()[0] == '1'
+          - _replica_vars.stdout.split()[1] == '1'
+          - _replica_vars.stdout.split()[2] == '2'
+          - _replica_vars.stdout.split()[3] == 'ON'
+        fail_msg: "Replica global variables do not match expected values: {{ _replica_vars.stdout }}"
+
+    - name: Check replica thread status
+      ansible.builtin.command:
+        cmd: mysql --defaults-file=/root/.my.cnf -e "SHOW REPLICA STATUS\G"
+      register: _replica_status
+      retries: 10
+      delay: 3
+      until:
+        - "'Replica_IO_Running: Yes' in _replica_status.stdout"
+        - "'Replica_SQL_Running: Yes' in _replica_status.stdout"
+      changed_when: false
+
+    - name: Assert replica threads are running
+      ansible.builtin.assert:
+        that:
+          - "'Replica_IO_Running: Yes' in _replica_status.stdout"
+          - "'Replica_SQL_Running: Yes' in _replica_status.stdout"
+        fail_msg: "Replica threads are not running: {{ _replica_status.stdout }}"
+
+    - name: Verify row replicated from master to replica
+      ansible.builtin.command:
+        cmd: mysql --defaults-file=/root/.my.cnf -N -s -e "SELECT val FROM app_db.t_repl WHERE id = 1;"
+      register: _replicated_row
+      retries: 15
+      delay: 2
+      until:
+        - _replicated_row.rc == 0
+        - _replicated_row.stdout == 'replicated_data_probe'
+      changed_when: false
+      failed_when: false
+
+    - name: Assert replicated row value
+      ansible.builtin.assert:
+        that:
+          - _replicated_row.stdout == 'replicated_data_probe'
+        fail_msg: "Data failed to replicate from master to replica: {{ _replicated_row.stdout }}"

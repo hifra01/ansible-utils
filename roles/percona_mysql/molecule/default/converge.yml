@@ -1,0 +1,43 @@
+---
+- name: Converge MySQL Master
+  hosts: mysql-master
+  tasks:
+    - name: Include hifra01.utils.percona_mysql on master
+      ansible.builtin.include_role:
+        name: hifra01.utils.percona_mysql
+      vars:
+        percona_mysql_role: "master"
+        percona_mysql_server_id: 1
+        percona_mysql_root_password: "TestRootPassword!123"
+        percona_mysql_replication_user: "repl_user"
+        percona_mysql_replication_password: "ReplPassword!123"
+        percona_mysql_replication_host: "%"
+        percona_mysql_databases:
+          - name: "app_db"
+            encoding: "utf8mb4"
+            collation: "utf8mb4_unicode_ci"
+        percona_mysql_users:
+          - name: "app_user"
+            password: "AppUserPassword!123"
+            host: "%"
+            priv: "app_db.*:ALL"
+        percona_mysql_extra_mysqld_config:
+          max_connect_errors: 1000
+
+- name: Converge MySQL Replica
+  hosts: mysql-replica
+  tasks:
+    - name: Include hifra01.utils.percona_mysql on replica
+      ansible.builtin.include_role:
+        name: hifra01.utils.percona_mysql
+      vars:
+        percona_mysql_role: "replica"
+        percona_mysql_server_id: 2
+        percona_mysql_root_password: "TestRootPassword!123"
+        percona_mysql_source_host: "{{ hostvars['mysql-master']['ansible_default_ipv4']['address'] | default('mysql-master') }}"
+        percona_mysql_source_port: 3306
+        percona_mysql_replication_user: "repl_user"
+        percona_mysql_replication_password: "ReplPassword!123"
+        percona_mysql_replica_start_replication: true
+        percona_mysql_extra_mysqld_config:
+          max_connect_errors: 1000

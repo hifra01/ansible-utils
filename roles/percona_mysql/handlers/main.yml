@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: MIT-0
+---
+# handlers file for percona_mysql
+
+- name: Validate mysql configuration for restart
+  ansible.builtin.command: /usr/sbin/mysqld --validate-config
+  changed_when: false
+  listen: "validate and restart mysql"
+
+- name: Restart mysql
+  ansible.builtin.service:
+    name: "{{ percona_mysql_service_name }}"
+    state: restarted
+  listen: "validate and restart mysql"
