@@ -89,6 +89,11 @@
     group: root
     mode: '0600'
 
+- name: Restart MySQL service
+  ansible.builtin.service:
+    name: "{{ percona_mysql_service_name }}"
+    state: restarted
+
 - name: Secure MySQL installation
   when: percona_mysql_secure_installation
   block:
