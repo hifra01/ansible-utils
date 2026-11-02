@@ -2,21 +2,168 @@
 - name: Verify
   hosts: all
   tasks:
-    - name: Check if Nginx is running
+    - name: Check if Nginx service is running
       ansible.builtin.service:
         name: nginx
         state: started
       check_mode: true
       register: _nginx_service
 
-    - name: Assert Nginx is running
+    - name: Assert Nginx service is active
       ansible.builtin.assert:
         that:
           - not _nginx_service.changed
 
-    - name: Verify Nginx responds on port 80
+    - name: Verify Nginx syntax configuration
+      ansible.builtin.command: nginx -t
+      changed_when: false
+
+    - name: Read cloudflare.conf content
+      ansible.builtin.slurp:
+        src: /etc/nginx/conf.d/cloudflare.conf
+      register: _cf_conf_b64
+
+    - name: Read allow-cloudflare-only.conf content
+      ansible.builtin.slurp:
+        src: /etc/nginx/allow-cloudflare-only.conf
+      register: _cf_allow_b64
+
+    - name: Assert Cloudflare configuration content
+      ansible.builtin.assert:
+        that:
+          - "'set_real_ip_from ::1;' in (_cf_conf_b64.content | b64decode)"
+          - "'set_real_ip_from 127.0.0.1;' in (_cf_conf_b64.content | b64decode)"
+          - "'set_real_ip_from 10.10.0.0/16;' in (_cf_conf_b64.content | b64decode)"
+          - "'real_ip_header CF-Connecting-IP;' in (_cf_conf_b64.content | b64decode)"
+          - "'real_ip_recursive on;' in (_cf_conf_b64.content | b64decode)"
+          - "'geo $realip_remote_addr $is_cloudflare' in (_cf_conf_b64.content | b64decode)"
+          - "'10.10.0.0/16 1;' in (_cf_conf_b64.content | b64decode)"
+          - "'if ($is_cloudflare = 0)' in (_cf_allow_b64.content | b64decode)"
+          - "'return 403;' in (_cf_allow_b64.content | b64decode)"
+
+    - name: Set site configuration directory path
+      ansible.builtin.set_fact:
+        _site_conf_dir: "{{ '/etc/nginx/sites-available' if ansible_os_family == 'Debian' else '/etc/nginx/conf.d' }}"
+
+    - name: Read default.conf
+      ansible.builtin.slurp:
+        src: "{{ _site_conf_dir }}/default.conf"
+      register: _default_conf_b64
+
+    - name: Read cf_protected.conf
+      ansible.builtin.slurp:
+        src: "{{ _site_conf_dir }}/cf_protected.conf"
+      register: _cf_protected_conf_b64
+
+    - name: Read custom_inline.conf
+      ansible.builtin.slurp:
+        src: "{{ _site_conf_dir }}/custom_inline.conf"
+      register: _inline_conf_b64
+
+    - name: Read custom_templated.conf
+      ansible.builtin.slurp:
+        src: "{{ _site_conf_dir }}/custom_templated.conf"
+      register: _templated_conf_b64
+
+    - name: Assert site configuration separation and template rendering
+      ansible.builtin.assert:
+        that:
+          - "'allow-cloudflare-only.conf' not in (_default_conf_b64.content | b64decode)"
+          - "'allow-cloudflare-only.conf' in (_cf_protected_conf_b64.content | b64decode)"
+          - "'listen 8081;' in (_inline_conf_b64.content | b64decode)"
+          - "'inline custom ok' in (_inline_conf_b64.content | b64decode)"
+          - "'listen 8082;' in (_templated_conf_b64.content | b64decode)"
+          - "'templated vhost: custom_ok' in (_templated_conf_b64.content | b64decode)"
+
+    - name: Verify HTTP response on port 80 (default site with real_ip only)
       ansible.builtin.uri:
-        url: http://localhost
+        url: http://127.0.0.1/index.html
         status_code: 200
-      register: _nginx_curl
-      failed_when: _nginx_curl.status != 200
+        return_content: true
+      register: _res_80
+
+    - name: Verify HTTP response on port 8080 (cf_protected site with trusted proxy)
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8080/index.html
+        headers:
+          Host: cf-protected.local
+        status_code: 200
+        return_content: true
+      register: _res_8080
+
+    - name: Verify HTTP response on port 8081 (custom_inline site)
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8081/
+        headers:
+          Host: custom-inline.local
+        status_code: 200
+        return_content: true
+      register: _res_8081
+
+    - name: Verify HTTP response on port 8082 (custom_templated site)
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8082/
+        headers:
+          Host: custom-templated.local
+        status_code: 200
+        return_content: true
+      register: _res_8082
+
+    - name: Assert HTTP response bodies
+      ansible.builtin.assert:
+        that:
+          - "'inline custom ok' in _res_8081.content"
+          - "'templated vhost: custom_ok' in _res_8082.content"
+
+    - name: Test standalone trusted_proxies mode (Cloudflare disabled)
+      ansible.builtin.include_role:
+        name: "hifra01.utils.nginx"
+      vars:
+        nginx_cloudflare_enabled: false
+        nginx_trusted_proxies:
+          - "192.168.100.1"
+        nginx_sites:
+          - name: default
+            domains:
+              - "_"
+            listen: 80
+            root: /var/www/html
+            type: static
+            cloudflare_real_ip: false
+            cloudflare_filter: false
+        nginx_enabled_sites:
+          - default
+
+    - name: Verify cloudflare files are absent
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: _cf_stats
+      loop:
+        - /etc/nginx/conf.d/cloudflare.conf
+        - /etc/nginx/allow-cloudflare-only.conf
+      loop_control:
+        loop_var: item
+
+    - name: Assert cloudflare files absent
+      ansible.builtin.assert:
+        that:
+          - not item.stat.exists
+      loop: "{{ _cf_stats.results }}"
+      loop_control:
+        loop_var: item
+
+    - name: Read trusted_proxies.conf content
+      ansible.builtin.slurp:
+        src: /etc/nginx/conf.d/trusted_proxies.conf
+      register: _tp_conf_b64
+
+    - name: Assert standalone trusted_proxies.conf directives
+      ansible.builtin.assert:
+        that:
+          - "'set_real_ip_from 192.168.100.1;' in (_tp_conf_b64.content | b64decode)"
+          - "'real_ip_header X-Forwarded-For;' in (_tp_conf_b64.content | b64decode)"
+          - "'real_ip_recursive on;' in (_tp_conf_b64.content | b64decode)"
+
+    - name: Verify Nginx syntax configuration in standalone mode
+      ansible.builtin.command: nginx -t
+      changed_when: false

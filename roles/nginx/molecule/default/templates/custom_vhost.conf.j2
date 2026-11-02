@@ -1,0 +1,9 @@
+# Managed by Molecule Test Fixture
+server {
+    listen {{ listen_port | default(8082) }};
+    server_name {{ server_name | default(item.name) }};
+
+    location / {
+        return 200 "templated vhost: {{ test_var | default('ok') }}\n";
+    }
+}

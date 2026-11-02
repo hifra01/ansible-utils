@@ -1,11 +1,15 @@
+{% if item.template is defined %}
+{{ lookup('ansible.builtin.template', item.template, template_vars=(item.vars | default({})) | combine({'item': item})) }}
+{% elif item.custom_config is defined %}
+{{ item.custom_config }}
+{% else %}
 server {
     listen {{ item.listen | default(80) }};
     server_name {{ item.domains | default([item.server_name | default('_')]) | join(' ') }};
 
     {% if item.cloudflare_filter | default(false) | bool %}
-    # Cloudflare IP filter (Access Control & Real IP)
-    include {{ nginx_config_dir }}/cloudflare_ips.conf;
-    real_ip_header CF-Connecting-IP;
+    # Cloudflare IP filter (Access Control)
+    include {{ nginx_config_dir }}/allow-cloudflare-only.conf;
     {% endif %}
 
     {% if item.custom_headers is defined %}
@@ -48,4 +52,4 @@ server {
     }
     {% endif %}
 }
-
+{% endif %}

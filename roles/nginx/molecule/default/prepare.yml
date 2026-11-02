@@ -17,7 +17,7 @@
       ansible.builtin.apt:
         update_cache: true
         cache_valid_time: 3600
-      when: ansible_os_family == 'Debian'
+      when: ansible_facts['os_family'] == 'Debian'
 
     - name: Ensure cron and curl are installed (Debian/Ubuntu)
       ansible.builtin.package:
@@ -25,13 +25,13 @@
           - cron
           - curl
         state: present
-      when: ansible_os_family == 'Debian'
+      when: ansible_facts['os_family'] == 'Debian'
 
     - name: Ensure cronie is installed (RedHat)
       ansible.builtin.package:
         name: cronie
         state: present
-      when: ansible_os_family == 'RedHat'
+      when: ansible_facts['os_family'] == 'RedHat'
 
     - name: Ensure /var/www/html directory exists
       ansible.builtin.file:

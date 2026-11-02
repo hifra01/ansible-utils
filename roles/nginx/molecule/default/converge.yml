@@ -5,3 +5,50 @@
     - name: "Include hifra01.utils.nginx"
       ansible.builtin.include_role:
         name: "hifra01.utils.nginx"
+      vars:
+        nginx_trusted_proxies:
+          - "::1"
+          - "127.0.0.1"
+          - "10.10.0.0/16"
+        nginx_sites:
+          - name: default
+            domains:
+              - "_"
+            listen: 80
+            root: /var/www/html
+            type: static
+            cloudflare_real_ip: true
+            cloudflare_filter: false
+
+          - name: cf_protected
+            domains:
+              - "cf-protected.local"
+            listen: 8080
+            root: /var/www/html
+            type: static
+            cloudflare_filter: true
+
+          - name: custom_inline
+            custom_config: |
+              server {
+                  listen 8081;
+                  server_name custom-inline.local;
+                  location / {
+                      return 200 "inline custom ok\n";
+                  }
+              }
+            vars:
+              sample_var: "test_inline"
+
+          - name: custom_templated
+            template: "{{ playbook_dir }}/templates/custom_vhost.conf.j2"
+            vars:
+              listen_port: 8082
+              server_name: "custom-templated.local"
+              test_var: "custom_ok"
+
+        nginx_enabled_sites:
+          - default
+          - cf_protected
+          - custom_inline
+          - custom_templated
