@@ -2,6 +2,20 @@
 ---
 # tasks file for percona_mysql configuration and security bootstrap
 
+- name: Check if MySQL data directory is initialized on RedHat family
+  ansible.builtin.stat:
+    path: /var/lib/mysql/mysql
+  register: _percona_mysql_datadir_init
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Initialize MySQL data directory on RedHat family
+  ansible.builtin.command:
+    cmd: /usr/sbin/mysqld --initialize-insecure --datadir=/var/lib/mysql --user=mysql
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+    - not _percona_mysql_datadir_init.stat.exists
+  changed_when: true
+
 - name: Ensure MySQL service is started and enabled
   ansible.builtin.service:
     name: "{{ percona_mysql_service_name }}"
@@ -16,7 +30,7 @@
 
 - name: Check if root already authenticates with configured password
   ansible.builtin.command:
-    cmd: "mysql --no-defaults -u root -p{{ percona_mysql_root_password | quote }} -e \"SELECT 1;\""
+    cmd: "mysql --no-defaults -S {{ percona_mysql_socket }} -u root -p{{ percona_mysql_root_password | quote }} -e \"SELECT 1;\""
   register: _percona_mysql_target_pass_auth
   changed_when: false
   failed_when: false
@@ -44,16 +58,16 @@
 
     - name: Check if MySQL connects via socket without password
       ansible.builtin.command:
-        cmd: mysql --no-defaults -u root -e "SELECT 1;"
+        cmd: "mysql --no-defaults -S {{ percona_mysql_socket }} -u root -e \"SELECT 1;\""
       register: _percona_mysql_socket_auth
       changed_when: false
       failed_when: false
       when: _percona_mysql_existing_my_cnf.rc != 0
 
-    - name: Set root password via socket auth on Debian/Ubuntu
+    - name: Set root password via socket auth
       ansible.builtin.command:
         cmd: >-
-          mysql --no-defaults -u root -e
+          mysql --no-defaults -S {{ percona_mysql_socket }} -u root -e
           "ALTER USER 'root'@'localhost' IDENTIFIED BY {{ percona_mysql_root_password | quote }}; FLUSH PRIVILEGES;"
       when:
         - _percona_mysql_existing_my_cnf.rc != 0
@@ -77,7 +91,8 @@
         - name: Set root password using temporary password
           ansible.builtin.command:
             cmd: >-
-              mysql --no-defaults --connect-expired-password -u root -p{{ (_percona_mysql_temp_pass.stdout | trim) | quote }} -e
+              mysql --no-defaults -S {{ percona_mysql_socket }} --connect-expired-password -u root
+              -p{{ (_percona_mysql_temp_pass.stdout | trim) | quote }} -e
               "ALTER USER 'root'@'localhost' IDENTIFIED BY {{ percona_mysql_root_password | quote }}; FLUSH PRIVILEGES;"
           changed_when: true
 
