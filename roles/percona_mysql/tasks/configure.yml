@@ -69,19 +69,16 @@
       block:
         - name: Extract temporary root password from log
           ansible.builtin.shell:
-            cmd: 'grep "temporary password" "{{ percona_mysql_error_log_file }}" | tail -n 1 | awk "{print \$NF}"'
+            cmd: "sed -n 's/.*temporary password is generated for root@localhost: //p' {{ percona_mysql_error_log_file }} | tail -n 1"
           register: _percona_mysql_temp_pass
           changed_when: false
-          failed_when:
-            - _percona_mysql_temp_pass.rc != 0
-            - _percona_mysql_temp_pass.stdout | length == 0
+          failed_when: (_percona_mysql_temp_pass.rc != 0) or (_percona_mysql_temp_pass.stdout | trim | length == 0)
 
         - name: Set root password using temporary password
           ansible.builtin.command:
             cmd: >-
-              mysql --no-defaults --connect-expired-password -u root -p{{ _percona_mysql_temp_pass.stdout | quote }} -e
+              mysql --no-defaults --connect-expired-password -u root -p{{ (_percona_mysql_temp_pass.stdout | trim) | quote }} -e
               "ALTER USER 'root'@'localhost' IDENTIFIED BY {{ percona_mysql_root_password | quote }}; FLUSH PRIVILEGES;"
-          when: _percona_mysql_temp_pass.stdout | length > 0
           changed_when: true
 
 - name: Deploy /root/.my.cnf credentials file
