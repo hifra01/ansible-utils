@@ -69,9 +69,12 @@
       block:
         - name: Extract temporary root password from log
           ansible.builtin.shell:
-            cmd: "grep 'temporary password' {{ percona_mysql_error_log_file }} | tail -n 1 | awk '{print $NF}'"
+            cmd: 'grep "temporary password" "{{ percona_mysql_error_log_file }}" | tail -n 1 | awk "{print \$NF}"'
           register: _percona_mysql_temp_pass
           changed_when: false
+          failed_when:
+            - _percona_mysql_temp_pass.rc != 0
+            - _percona_mysql_temp_pass.stdout | length == 0
 
         - name: Set root password using temporary password
           ansible.builtin.command:

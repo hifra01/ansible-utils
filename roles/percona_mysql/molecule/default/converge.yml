@@ -34,7 +34,7 @@
         percona_mysql_role: "replica"
         percona_mysql_server_id: 2
         percona_mysql_root_password: "TestRootPassword!123"
-        percona_mysql_source_host: "{{ hostvars['mysql-master']['ansible_default_ipv4']['address'] | default('mysql-master') }}"
+        percona_mysql_source_host: "{{ hostvars['mysql-master']['ansible_facts']['default_ipv4']['address'] | default('mysql-master') }}"
         percona_mysql_source_port: 3306
         percona_mysql_replication_user: "repl_user"
         percona_mysql_replication_password: "ReplPassword!123"
