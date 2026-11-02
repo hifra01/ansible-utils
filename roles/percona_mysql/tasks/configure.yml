@@ -2,6 +2,35 @@
 ---
 # tasks file for percona_mysql configuration and security bootstrap
 
+- name: Configure systemd service override for MySQL on RedHat family
+  when: ansible_facts['os_family'] == 'RedHat'
+  block:
+    - name: Ensure systemd drop-in directory exists for MySQL service
+      ansible.builtin.file:
+        path: "/etc/systemd/system/{{ percona_mysql_service_name }}.service.d"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Configure systemd service Type=simple override for MySQL
+      ansible.builtin.copy:
+        content: |
+          [Service]
+          Type=simple
+          ExecStart=
+          ExecStart=/usr/sbin/mysqld --defaults-file={{ percona_mysql_main_config_file }} $MYSQLD_OPTS
+        dest: "/etc/systemd/system/{{ percona_mysql_service_name }}.service.d/override.conf"
+        owner: root
+        group: root
+        mode: '0644'
+      register: _percona_mysql_systemd_override
+
+    - name: Reload systemd daemon if MySQL override changed
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      when: _percona_mysql_systemd_override.changed
+
 - name: Check if MySQL data directory is initialized on RedHat family
   ansible.builtin.stat:
     path: /var/lib/mysql/mysql
@@ -27,6 +56,16 @@
     path: "{{ percona_mysql_socket }}"
     state: present
     timeout: 60
+
+- name: Wait for MySQL server to accept connections
+  ansible.builtin.command:
+    cmd: "mysqladmin --no-defaults -S {{ percona_mysql_socket }} ping"
+  register: _percona_mysql_ping
+  retries: 30
+  delay: 1
+  until: _percona_mysql_ping.rc == 0 or 'Access denied' in _percona_mysql_ping.stderr
+  changed_when: false
+  failed_when: _percona_mysql_ping.rc != 0 and 'Access denied' not in _percona_mysql_ping.stderr
 
 - name: Check if root already authenticates with configured password
   ansible.builtin.command:
