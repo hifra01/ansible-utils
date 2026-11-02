@@ -6,8 +6,6 @@
 
 - name: Install Nginx and modules on RHEL-based systems
   ansible.builtin.package:
-    name:
-      - nginx
-      - nginx-all-modules
+    name: "{{ nginx_packages }}"
     state: present
   notify: "validate and restart nginx"

@@ -1,11 +1,57 @@
 ---
 # tasks file for nginx
 
+- name: Assert supported OS family
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] in ['Debian', 'RedHat']
+    fail_msg: "This role only supports Debian and RedHat OS families. Current family: {{ ansible_facts['os_family'] }}"
+    quiet: true
+
+- name: Assert valid Nginx role configurations
+  ansible.builtin.assert:
+    that:
+      - nginx_server_tokens in ['on', 'off']
+      - nginx_ssl_prefer_server_ciphers in ['on', 'off']
+      - nginx_real_ip_recursive in ['on', 'off']
+      - nginx_real_ip_header is string
+      - nginx_real_ip_header | length > 0
+      - nginx_trusted_proxies is sequence
+      - nginx_sites is sequence
+      - nginx_enabled_sites is sequence
+    fail_msg: "Invalid global Nginx configuration parameters provided."
+    quiet: true
+
+- name: Assert valid site configurations
+  ansible.builtin.assert:
+    that:
+      - item.name is defined
+      - item.name is string
+      - item.name | length > 0
+      - not (item.custom_config is defined and item.template is defined)
+      - >-
+        item.custom_config is defined or
+        item.template is defined or
+        (item.type | default('static') in ['static', 'proxy', 'php'])
+      - >-
+        (item.type | default('static') != 'proxy') or
+        item.custom_config is defined or
+        item.template is defined or
+        (item.proxy_pass is defined and item.proxy_pass | length > 0)
+    fail_msg: >-
+      Invalid site definition for '{{ item.name | default('unknown') }}'.
+      Check custom_config/template mutual exclusivity, type, or proxy_pass.
+    quiet: true
+  loop: "{{ nginx_sites }}"
+  loop_control:
+    loop_var: item
+    label: "{{ item.name | default('unknown') }}"
+
 - name: Include OS-specific variables
-  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+  ansible.builtin.include_vars: "{{ ansible_facts['os_family'] }}.yml"
 
 - name: Install Nginx package for current OS family
-  ansible.builtin.include_tasks: "setup-{{ ansible_os_family }}.yml"
+  ansible.builtin.include_tasks: "setup-{{ ansible_facts['os_family'] }}.yml"
 
 - name: Ensure Nginx directories exist
   ansible.builtin.file:
@@ -14,46 +60,67 @@
     mode: '0755'
   loop:
     - "{{ nginx_config_dir }}"
+    - "{{ nginx_config_dir }}/conf.d"
     - "{{ nginx_site_available_dir }}"
     - "{{ nginx_site_enabled_dir }}"
+  loop_control:
+    loop_var: item
 
 - name: Check if DH parameters file exists
   ansible.builtin.stat:
     path: "{{ nginx_config_dir }}/dhparam.pem"
-  register: nginx_dhparam_stat
+  register: _nginx_dhparam_stat
 
 - name: Generate DH parameters (2048-bit)
   ansible.builtin.command: "openssl dhparam -out {{ nginx_config_dir }}/dhparam.pem 2048"
-  when: not nginx_dhparam_stat.stat.exists
+  when: not _nginx_dhparam_stat.stat.exists
   changed_when: true
   notify: "validate and restart nginx"
 
-- name: Check if any site requires Cloudflare filter
+- name: Determine if Cloudflare configuration is required
   ansible.builtin.set_fact:
     nginx_use_cloudflare: >-
-      {{ nginx_sites |
-         selectattr('name', 'in', nginx_enabled_sites) |
-         selectattr('cloudflare_filter', 'defined') |
-         selectattr('cloudflare_filter', 'equalto', true) |
-         list | length > 0 }}
+      {{ nginx_cloudflare_enabled | bool or
+         (nginx_sites |
+          selectattr('name', 'in', nginx_enabled_sites) |
+          selectattr('cloudflare_real_ip', 'defined') |
+          selectattr('cloudflare_real_ip', 'equalto', true) |
+          list | length > 0) or
+         (nginx_sites |
+          selectattr('name', 'in', nginx_enabled_sites) |
+          selectattr('cloudflare_filter', 'defined') |
+          selectattr('cloudflare_filter', 'equalto', true) |
+          list | length > 0) }}
 
 - name: Configure Cloudflare IP updater and cron job
   when: nginx_use_cloudflare | bool
   block:
+    - name: Ensure standalone trusted_proxies.conf is absent when Cloudflare is active
+      ansible.builtin.file:
+        path: "{{ nginx_config_dir }}/conf.d/trusted_proxies.conf"
+        state: absent
+      notify: "validate and reload nginx"
+
     - name: Template update_cloudflare_ips.sh updater script
       ansible.builtin.template:
         src: update_cloudflare_ips.sh.j2
         dest: /usr/local/bin/update_cloudflare_ips.sh
         mode: '0755'
+      register: _nginx_cf_script
 
-    - name: Check if cloudflare_ips.conf exists
+    - name: Check if cloudflare.conf exists
       ansible.builtin.stat:
-        path: "{{ nginx_config_dir }}/cloudflare_ips.conf"
-      register: nginx_cloudflare_ips_stat
+        path: "{{ nginx_config_dir }}/conf.d/cloudflare.conf"
+      register: _nginx_cf_conf_stat
 
-    - name: Run update_cloudflare_ips.sh to generate initial IP list
+    - name: Check if allow-cloudflare-only.conf exists
+      ansible.builtin.stat:
+        path: "{{ nginx_config_dir }}/allow-cloudflare-only.conf"
+      register: _nginx_cf_allow_stat
+
+    - name: Run update_cloudflare_ips.sh to generate initial IP list and rules
       ansible.builtin.command: /usr/local/bin/update_cloudflare_ips.sh
-      when: not nginx_cloudflare_ips_stat.stat.exists
+      when: _nginx_cf_script.changed or (not _nginx_cf_conf_stat.stat.exists) or (not _nginx_cf_allow_stat.stat.exists)
       changed_when: true
 
     - name: Create weekly cron job for updating Cloudflare IPs
@@ -62,11 +129,40 @@
         special_time: weekly
         job: "/usr/local/bin/update_cloudflare_ips.sh >/dev/null 2>&1"
 
-- name: Remove weekly cron job for updating Cloudflare IPs if not needed
-  ansible.builtin.cron:
-    name: "Update Cloudflare IP ranges for Nginx"
-    state: absent
-  when: not nginx_use_cloudflare | bool
+- name: Remove Cloudflare files and cron job when not needed
+  when: not (nginx_use_cloudflare | bool)
+  block:
+    - name: Remove weekly cron job for updating Cloudflare IPs
+      ansible.builtin.cron:
+        name: "Update Cloudflare IP ranges for Nginx"
+        state: absent
+
+    - name: Remove Cloudflare configuration files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ nginx_config_dir }}/conf.d/cloudflare.conf"
+        - "{{ nginx_config_dir }}/allow-cloudflare-only.conf"
+        - "{{ nginx_config_dir }}/cloudflare_ips.conf"
+      loop_control:
+        loop_var: item
+      notify: "validate and reload nginx"
+
+    - name: Configure standalone trusted_proxies.conf
+      ansible.builtin.template:
+        src: trusted_proxies.conf.j2
+        dest: "{{ nginx_config_dir }}/conf.d/trusted_proxies.conf"
+        mode: '0644'
+      when: nginx_trusted_proxies | length > 0
+      notify: "validate and reload nginx"
+
+    - name: Remove standalone trusted_proxies.conf if no trusted proxies defined
+      ansible.builtin.file:
+        path: "{{ nginx_config_dir }}/conf.d/trusted_proxies.conf"
+        state: absent
+      when: nginx_trusted_proxies | length == 0
+      notify: "validate and reload nginx"
 
 - name: Configure main nginx.conf
   ansible.builtin.template:
@@ -81,6 +177,9 @@
     dest: "{{ nginx_site_available_dir }}/{{ item.name }}.conf"
     mode: '0644'
   loop: "{{ nginx_sites }}"
+  loop_control:
+    loop_var: item
+    label: "{{ item.name }}"
   when: item.name in nginx_enabled_sites
   notify: "validate and reload nginx"
 
@@ -90,8 +189,11 @@
     dest: "{{ nginx_site_enabled_dir }}/{{ item.name }}.conf"
     state: link
   loop: "{{ nginx_sites }}"
+  loop_control:
+    loop_var: item
+    label: "{{ item.name }}"
   when:
-    - ansible_os_family == 'Debian'
+    - ansible_facts['os_family'] == 'Debian'
     - item.name in nginx_enabled_sites
   notify: "validate and reload nginx"
 
@@ -99,15 +201,20 @@
   ansible.builtin.find:
     paths: "{{ nginx_site_enabled_dir }}"
     patterns: "*.conf"
-  register: nginx_active_configs
+    file_type: any
+  register: _nginx_active_configs
 
 - name: Clean up unused site configurations
   ansible.builtin.file:
     path: "{{ item.path }}"
     state: absent
-  loop: "{{ nginx_active_configs.files }}"
+  loop: "{{ _nginx_active_configs.files }}"
+  loop_control:
+    loop_var: item
+    label: "{{ item.path | basename }}"
   when:
-    - (item.path | basename | regex_replace('\.conf$', '')) not in nginx_enabled_sites
+    - (item.path | basename | regex_replace('\\.conf$', '')) not in nginx_enabled_sites
+    - (item.path | basename) not in ['cloudflare.conf', 'trusted_proxies.conf']
   notify: "validate and reload nginx"
 
 - name: Ensure Nginx service is running and enabled
