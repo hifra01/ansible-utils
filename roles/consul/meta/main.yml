@@ -5,7 +5,7 @@ galaxy_info:
   description: Ansible role to install and configure HashiCorp Consul in server or client mode with per-node advertised service definitions.
   company: hifra.dev
   license: MIT
-  min_ansible_version: "2.15"
+  min_ansible_version: "2.21.0"
 
   platforms:
     - name: Debian

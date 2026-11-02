@@ -6,12 +6,28 @@
   ansible.builtin.assert:
     that:
       - consul_service.name is defined
-      - consul_service.name | length > 0
+      - consul_service.name | string is match('^[a-zA-Z0-9_-]+$')
+      - (consul_service.id is not defined) or (consul_service.id | string is match('^[a-zA-Z0-9_-]+$'))
       - (consul_service.port is not defined) or (consul_service.port | int >= 1 and consul_service.port | int <= 65535)
-    fail_msg: "Each item in consul_services must define a non-empty name and a valid port (1-65535) if specified."
+    fail_msg: >-
+      Each item in consul_services must define a valid name/id ([a-zA-Z0-9_-]+)
+      and a valid port (1-65535) if specified.
   loop: "{{ consul_services }}"
   loop_control:
     loop_var: consul_service
+
+- name: Validate advertised service health checks
+  ansible.builtin.assert:
+    that:
+      - >-
+        ((consul_check_item.1.http is defined) | ternary(1, 0)) +
+        ((consul_check_item.1.tcp is defined) | ternary(1, 0)) +
+        ((consul_check_item.1.args is defined) | ternary(1, 0)) == 1
+    fail_msg: "Each health check in consul_services must define exactly one of 'http', 'tcp', or 'args'."
+  loop: "{{ consul_services | subelements('checks', skip_missing=True) }}"
+  loop_control:
+    loop_var: consul_check_item
+    label: "{{ consul_check_item.0.name }}"
 
 - name: Render advertised service definition files
   ansible.builtin.template:

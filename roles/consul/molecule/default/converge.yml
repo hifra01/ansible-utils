@@ -8,8 +8,14 @@
       vars:
         consul_mode: "server"
         consul_bootstrap_expect: 1
-        consul_ui: true
+        consul_datacenter: "dc1"
+        consul_bind_addr: "0.0.0.0"
         consul_client_addr: "0.0.0.0"
+        consul_ui: true
+        consul_retry_join:
+          - "127.0.0.1"
+        consul_extra_config:
+          enable_local_script_checks: false
         consul_services:
           - name: "web"
             id: "web-80"

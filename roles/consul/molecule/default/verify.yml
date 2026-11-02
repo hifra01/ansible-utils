@@ -86,3 +86,83 @@
           - "'redis' in _agent_services.json"
           - "_agent_services.json['redis']['Port'] == 6379"
         fail_msg: "Advertised services were not registered in Consul agent catalog."
+
+    - name: Read rendered consul.hcl content
+      ansible.builtin.slurp:
+        src: /etc/consul.d/consul.hcl
+      register: _consul_hcl_slurp
+
+    - name: Assert consul.hcl directives for server mode, networking, UI, and retry_join
+      ansible.builtin.assert:
+        that:
+          - "'datacenter = \"dc1\"' in (_consul_hcl_slurp.content | b64decode)"
+          - "'server = true' in (_consul_hcl_slurp.content | b64decode)"
+          - "'bootstrap_expect = 1' in (_consul_hcl_slurp.content | b64decode)"
+          - "'bind_addr = \"0.0.0.0\"' in (_consul_hcl_slurp.content | b64decode)"
+          - "'client_addr = \"0.0.0.0\"' in (_consul_hcl_slurp.content | b64decode)"
+          - "'enabled = true' in (_consul_hcl_slurp.content | b64decode)"
+          - "'retry_join = [\"127.0.0.1\"]' in (_consul_hcl_slurp.content | b64decode)"
+        fail_msg: "Rendered /etc/consul.d/consul.hcl is missing expected directives."
+
+    - name: Check extra.json configuration file
+      ansible.builtin.stat:
+        path: /etc/consul.d/extra.json
+      register: _consul_extra_stat
+
+    - name: Read rendered extra.json content
+      ansible.builtin.slurp:
+        src: /etc/consul.d/extra.json
+      register: _consul_extra_slurp
+
+    - name: Assert extra.json exists with proper mode and content
+      ansible.builtin.assert:
+        that:
+          - _consul_extra_stat.stat.exists
+          - _consul_extra_stat.stat.mode == '0640'
+          - (_consul_extra_slurp.content | b64decode | from_json).enable_local_script_checks == false
+        fail_msg: "/etc/consul.d/extra.json does not exist or has invalid content."
+
+    - name: Verify Consul UI HTTP endpoint is reachable
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8500/ui/
+        status_code: 200
+      register: _consul_ui_check
+
+    - name: Render client mode configuration to temporary file for verification
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../templates/consul.hcl.j2"
+        dest: /tmp/consul-client-test.hcl
+        mode: '0640'
+      vars:
+        consul_mode: "client"
+        consul_bootstrap_expect: 3
+        consul_datacenter: "dc1"
+        consul_node_name: "client-node"
+        consul_data_dir: "/opt/consul"
+        consul_log_level: "INFO"
+        consul_bind_addr: "0.0.0.0"
+        consul_advertise_addr: "127.0.0.1"
+        consul_client_addr: "127.0.0.1"
+        consul_ui: false
+        consul_retry_join:
+          - "127.0.0.1"
+        consul_encrypt: ""
+      changed_when: false
+
+    - name: Read rendered client mode configuration
+      ansible.builtin.slurp:
+        src: /tmp/consul-client-test.hcl
+      register: _consul_client_slurp
+
+    - name: Remove temporary client mode configuration file
+      ansible.builtin.file:
+        path: /tmp/consul-client-test.hcl
+        state: absent
+      changed_when: false
+
+    - name: Assert client mode configuration sets server = false and omits bootstrap_expect
+      ansible.builtin.assert:
+        that:
+          - "'server = false' in (_consul_client_slurp.content | b64decode)"
+          - "'bootstrap_expect' not in (_consul_client_slurp.content | b64decode)"
+        fail_msg: "Client mode configuration did not set server = false or failed to omit bootstrap_expect."

@@ -13,7 +13,20 @@
     that:
       - consul_mode in ['server', 'client']
       - (consul_mode == 'client') or (consul_bootstrap_expect | int >= 1)
-    fail_msg: "consul_mode must be 'server' or 'client', and consul_bootstrap_expect must be >= 1 in server mode."
+      - consul_datacenter | string | length > 0
+      - consul_node_name | string | length > 0
+      - consul_data_dir is match('^/')
+      - consul_config_dir is match('^/')
+      - consul_bind_addr | string | length > 0
+      - consul_client_addr | string | length > 0
+      - consul_ui is boolean
+      - consul_log_level in ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERR']
+      - consul_package_state in ['present', 'latest']
+    fail_msg: >-
+      Invalid consul_* role variables: check consul_mode ('server'/'client'),
+      consul_bootstrap_expect (>= 1), non-empty consul_datacenter/consul_node_name/addresses,
+      absolute paths for consul_data_dir/consul_config_dir, boolean consul_ui,
+      valid consul_log_level, and consul_package_state ('present'/'latest').
 
 - name: Load OS-specific variables
   ansible.builtin.include_vars: "{{ ansible_facts['os_family'] }}.yml"

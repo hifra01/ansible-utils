@@ -2,4 +2,5 @@
 ---
 consul_prerequisite_packages:
   - yum-utils
+  - ca-certificates
 consul_service_name: "consul"

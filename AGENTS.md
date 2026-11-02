@@ -7,7 +7,7 @@ Guidance for AI coding agents working in this repository.
 - **What**: Ansible Collection `hifra01.utils` — reusable Linux infrastructure roles.
 - **Author**: Hilman F. Rakhmad (`hifra.dev`), license MIT.
 - **Repo**: https://github.com/hifra01/ansible-utils
-- **Requires**: `ansible-core >= 2.15` (see `meta/runtime.yml`); collection deps
+- **Requires**: `ansible-core >= 2.21.0` (see `meta/runtime.yml`); collection deps
   `ansible.posix >= 1.5.0`, `community.general >= 9.0.0` (see `galaxy.yml`).
 - **Targets**: Debian/Ubuntu and RHEL family (Rocky/Alma). Some roles also support Alpine/Arch.
 

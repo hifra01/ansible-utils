@@ -175,3 +175,12 @@ Task: "T012 [P] Implement consul validate and reload/restart handlers in roles/c
 3. Add User Story 2 → Per-host service advertisement and orphan purge working → Verify via Molecule catalog API
 4. Add User Story 3 → Cluster joining, network bindings, UI, and `extra.json` working → Verify via Molecule
 5. Complete Polish → Docs, CI registration, `yamllint .`, `ansible-lint`, and full 5-distro Molecule test loop
+
+---
+
+## Phase 7: Convergence
+
+- [X] T029 CRITICAL: Update collection runtime and documentation baseline from `2.15` to `>=2.21.0` in `meta/runtime.yml`, `AGENTS.md`, `roles/consul/meta/main.yml`, and `roles/consul/README.md` per Constitution Technical Stack & Collection Constraints (`contradicts`)
+- [X] T030 Validate all `consul_*` top-level inputs (`consul_datacenter`, `consul_node_name`, `consul_data_dir`, `consul_config_dir`, `consul_bind_addr`, `consul_client_addr`, `consul_ui`, `consul_log_level`, `consul_package_state`) in `roles/consul/tasks/main.yml` and validate `consul_services` item/check constraints (`name`/`id` regex `[a-zA-Z0-9_-]+` and mutually exclusive `http`/`tcp`/`args` checks) in `roles/consul/tasks/services.yml` per T008, T018, and `data-model.md` (`partial`)
+- [X] T031 Extend `roles/consul/molecule/default/converge.yml` and `roles/consul/molecule/default/verify.yml` to verify `client` mode configuration rendering (`server = false`, `bootstrap_expect` omitted), custom `consul_datacenter`, `consul_bind_addr`, `consul_retry_join`, and `consul_extra_config` (`extra.json`) per T016 and T023 (`partial`)
+- [X] T032 Update `roles/consul/vars/RedHat.yml` so `consul_prerequisite_packages` matches `T007` (`yum-utils`, `ca-certificates`, `curl`) per T007 (`partial`)

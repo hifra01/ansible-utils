@@ -56,8 +56,11 @@ families.
 
 ## Technical Stack & Collection Constraints
 
-- **Runtime & Dependencies**: Requires `ansible-core >= 2.15` (`meta/runtime.yml`) and collection
-  dependencies `ansible.posix >= 1.5.0` and `community.general >= 9.0.0` (`galaxy.yml`).
+- **Runtime & Dependencies**: Requires `ansible-core >= 2.21.0` (`meta/runtime.yml`) and
+  collection dependencies `ansible.posix >= 1.5.0` and `community.general >= 9.0.0`
+  (`galaxy.yml`). Python development and testing tooling MUST match `requirements.txt`
+  (`ansible-core >= 2.21.0`, `molecule >= 26.8.0`, `molecule-plugins[docker] >= 26.7.15`,
+  `ansible-lint >= 8.5.0`, `yamllint >= 1.35.0`).
 - **Role Documentation**: Every role MUST maintain an up-to-date `README.md` (description,
   supported platforms, requirements, role variables with defaults, example playbook, license)
   and accurate `meta/main.yml` `galaxy_info`, and MUST be listed in the roles table in
@@ -96,4 +99,4 @@ Sync Impact Report, and versioned according to Semantic Versioning:
 - **MINOR**: Addition of a new Core Principle, section, or materially expanded governance rule.
 - **PATCH**: Wording clarifications, typo fixes, or non-semantic refinements.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-17 | **Last Amended**: 2026-10-17
+**Version**: 1.1.0 | **Ratified**: 2026-10-17 | **Last Amended**: 2026-11-01

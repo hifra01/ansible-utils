@@ -9,7 +9,7 @@ Ansible role to install and configure HashiCorp Consul in either `server` or `cl
 
 ## Requirements
 
-* `ansible-core >= 2.15`
+* `ansible-core >= 2.21.0`
 * Requires systemd init system on target hosts.
 * Fact gathering (`gather_facts: true`) must be enabled.
 
