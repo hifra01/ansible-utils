@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: MIT-0
+---
+# handlers file for percona_mysql
+
+- name: Validate mysql configuration for restart
+  ansible.builtin.command: /usr/sbin/mysqld --validate-config
+  changed_when: false
+  listen: "validate and restart mysql"
+
+- name: Restart mysql
+  ansible.builtin.service:
+    name: "{{ percona_mysql_service_name }}"
+    state: restarted
+  listen: "validate and restart mysql"
+
+- name: Wait for MySQL socket after restart
+  ansible.builtin.wait_for:
+    path: "{{ percona_mysql_socket }}"
+    state: present
+    timeout: 60
+  listen: "validate and restart mysql"
+
+- name: Wait for MySQL server to accept connections after restart
+  ansible.builtin.command:
+    cmd: "mysql --defaults-file=/root/.my.cnf -N -s -e \"SELECT @@server_id, @@gtid_mode;\""
+  register: _percona_mysql_restart_ping
+  retries: 30
+  delay: 1
+  until:
+    - _percona_mysql_restart_ping.rc == 0
+    - _percona_mysql_restart_ping.stdout.split() | length == 2
+    - _percona_mysql_restart_ping.stdout.split()[0] == (percona_mysql_server_id | string)
+    - _percona_mysql_restart_ping.stdout.split()[1] == percona_mysql_gtid_mode
+  changed_when: false
+  listen: "validate and restart mysql"

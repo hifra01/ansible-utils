@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: MIT-0
+---
+percona_mysql_prerequisite_packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+
+percona_mysql_packages:
+  - percona-server-server
+  - percona-server-client
+
+percona_mysql_service_name: "mysql"
+percona_mysql_config_include_dir: "/etc/mysql/conf.d"
+percona_mysql_dropin_config_file: "/etc/mysql/conf.d/99-percona-managed.cnf"
+percona_mysql_main_config_file: "/etc/mysql/my.cnf"
+percona_mysql_socket: "/var/run/mysqld/mysqld.sock"
+percona_mysql_error_log_file: "/var/log/mysql/error.log"

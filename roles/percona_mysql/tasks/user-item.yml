@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for managing a single percona_mysql user item
+
+- name: Validate user item attributes
+  ansible.builtin.assert:
+    that:
+      - percona_mysql_user_item.name is defined
+      - percona_mysql_user_item.name | length > 0
+      - >-
+        (percona_mysql_user_item.state | default('present')) == 'absent' or
+        (percona_mysql_user_item.password is defined and percona_mysql_user_item.password | length > 0)
+    fail_msg: "User item must have a valid 'name' and, when present, a non-empty 'password'."
+
+- name: Check user existence
+  ansible.builtin.command:
+    cmd: >-
+      mysql --defaults-file=/root/.my.cnf -N -s -e
+      "SELECT COUNT(*) FROM mysql.user
+       WHERE User = '{{ percona_mysql_user_item.name }}'
+       AND Host = '{{ percona_mysql_user_item.host | default('localhost') }}';"
+  register: _percona_mysql_user_exists
+  changed_when: false
+
+- name: Create user when absent and state is present
+  ansible.builtin.command:
+    cmd: >-
+      mysql --defaults-file=/root/.my.cnf -e
+      "CREATE USER '{{ percona_mysql_user_item.name }}'@'{{ percona_mysql_user_item.host | default('localhost') }}'
+       IDENTIFIED BY {{ percona_mysql_user_item.password | quote }};"
+  when:
+    - (percona_mysql_user_item.state | default('present')) == 'present'
+    - _percona_mysql_user_exists.stdout | int == 0
+  changed_when: true
+
+- name: Manage privileges for user when state is present
+  when:
+    - (percona_mysql_user_item.state | default('present')) == 'present'
+    - percona_mysql_user_item.priv is defined
+    - percona_mysql_user_item.priv | length > 0
+  block:
+    - name: Inspect current user grants
+      ansible.builtin.command:
+        cmd: >-
+          mysql --defaults-file=/root/.my.cnf -N -s -e
+          "SHOW GRANTS FOR '{{ percona_mysql_user_item.name }}'@'{{ percona_mysql_user_item.host | default('localhost') }}';"
+      register: _percona_mysql_user_grants
+      changed_when: false
+
+    - name: Set normalized grant variables
+      ansible.builtin.set_fact:
+        _percona_grant_target: "{{ percona_mysql_user_item.priv.split(':')[0] }}"
+        _percona_grant_priv: "{{ percona_mysql_user_item.priv.split(':')[1] | default('USAGE') }}"
+        _percona_norm_grants: "{{ _percona_mysql_user_grants.stdout | replace('`', '') }}"
+
+    - name: Apply user privilege grant
+      ansible.builtin.command:
+        cmd: >-
+          mysql --defaults-file=/root/.my.cnf -e
+          "GRANT {{ _percona_grant_priv }}
+           ON {{ _percona_grant_target }}
+           TO '{{ percona_mysql_user_item.name }}'@'{{ percona_mysql_user_item.host | default('localhost') }}';
+           FLUSH PRIVILEGES;"
+      when: >
+        (_percona_grant_target not in _percona_norm_grants) or
+        (_percona_grant_priv not in _percona_norm_grants and
+         (_percona_grant_priv != 'ALL' or 'ALL PRIVILEGES' not in _percona_norm_grants))
+      changed_when: true
+
+- name: Drop user when state is absent
+  ansible.builtin.command:
+    cmd: >-
+      mysql --defaults-file=/root/.my.cnf -e
+      "DROP USER IF EXISTS '{{ percona_mysql_user_item.name }}'@'{{ percona_mysql_user_item.host | default('localhost') }}';
+       FLUSH PRIVILEGES;"
+  when:
+    - (percona_mysql_user_item.state | default('present')) == 'absent'
+    - _percona_mysql_user_exists.stdout | int > 0
+  changed_when: true
