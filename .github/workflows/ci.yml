@@ -49,6 +49,7 @@ jobs:
       docker: ${{ steps.filter.outputs.docker }}
       linux_users: ${{ steps.filter.outputs.linux_users }}
       nginx: ${{ steps.filter.outputs.nginx }}
+      percona_mongodb: ${{ steps.filter.outputs.percona_mongodb }}
       php: ${{ steps.filter.outputs.php }}
     steps:
       - name: Checkout code
@@ -71,6 +72,8 @@ jobs:
               - 'roles/linux_users/**'
             nginx:
               - 'roles/nginx/**'
+            percona_mongodb:
+              - 'roles/percona_mongodb/**'
             php:
               - 'roles/php/**'
 
@@ -89,6 +92,7 @@ jobs:
           - docker
           - linux_users
           - nginx
+          - percona_mongodb
           - php
         distro:
           - ubuntu2204
@@ -129,6 +133,7 @@ jobs:
             docker)      changed="${{ needs.detect-changes.outputs.docker }}" ;;
             linux_users) changed="${{ needs.detect-changes.outputs.linux_users }}" ;;
             nginx)       changed="${{ needs.detect-changes.outputs.nginx }}" ;;
+            percona_mongodb) changed="${{ needs.detect-changes.outputs.percona_mongodb }}" ;;
             php)         changed="${{ needs.detect-changes.outputs.php }}" ;;
           esac
           if [[ "$changed" == "true" ]]; then

@@ -1,0 +1,161 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for percona_mongodb replica set management
+
+- name: Probe MongoDB admin authentication status
+  ansible.builtin.command:
+    cmd: >-
+      mongosh --quiet --host 127.0.0.1 --port {{ percona_mongodb_port }}
+      -u {{ percona_mongodb_admin_user }} -p {{ percona_mongodb_admin_password }}
+      --authenticationDatabase admin --eval "db.runCommand({ connectionStatus: 1 }).ok"
+  register: _percona_mongodb_auth_probe
+  changed_when: false
+  failed_when: false
+  no_log: true
+  when: percona_mongodb_auth_enabled | bool
+
+- name: Set authentication active fact
+  ansible.builtin.set_fact:
+    _percona_mongodb_auth_active: >-
+      {{ (percona_mongodb_auth_enabled | bool) and (_percona_mongodb_auth_probe.rc == 0) and
+         ('1' in _percona_mongodb_auth_probe.stdout) }}
+
+- name: Build normalized desired replica set members list
+  ansible.builtin.set_fact:
+    _percona_mongodb_desired_members: "{{ _desired_raw | from_json }}"
+  vars:
+    _desired_raw: >-
+      {% set members = [] %}
+      {% if percona_mongodb_replset_members | length == 0 %}
+        {% set _ = members.append({
+          '_id': 0,
+          'host': percona_mongodb_replset_advertise_host ~ ':' ~ (percona_mongodb_port | string)
+        }) %}
+      {% else %}
+        {% for m in percona_mongodb_replset_members %}
+          {% if m is string %}
+            {% set h = m if ':' in m else m ~ ':' ~ (percona_mongodb_port | string) %}
+            {% set _ = members.append({'_id': loop.index0, 'host': h}) %}
+          {% else %}
+            {% set h = m.host if ':' in m.host else m.host ~ ':' ~ (percona_mongodb_port | string) %}
+            {% set mem_dict = {'_id': m._id | default(loop.index0), 'host': h} %}
+            {% if m.priority is defined %}{% set _ = mem_dict.update({'priority': m.priority | float}) %}{% endif %}
+            {% if m.arbiterOnly is defined %}{% set _ = mem_dict.update({'arbiterOnly': m.arbiterOnly | bool}) %}{% endif %}
+            {% if m.hidden is defined %}{% set _ = mem_dict.update({'hidden': m.hidden | bool}) %}{% endif %}
+            {% if m.votes is defined %}{% set _ = mem_dict.update({'votes': m.votes | int}) %}{% endif %}
+            {% set _ = members.append(mem_dict) %}
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+      {{ members | to_json }}
+
+- name: Check replica set initialization status
+  ansible.builtin.command:
+    cmd: >-
+      mongosh --quiet --host 127.0.0.1 --port {{ percona_mongodb_port }}
+      {% if _percona_mongodb_auth_active | bool %}
+      -u {{ percona_mongodb_admin_user }} -p {{ percona_mongodb_admin_password }} --authenticationDatabase admin
+      {% endif %}
+      --eval "try { const s = rs.status(); print(s.ok ? 'INITIALIZED' : 'UNINITIALIZED'); } catch (e) { print('UNINITIALIZED'); }"
+  register: _percona_mongodb_rs_status_check
+  changed_when: false
+  no_log: true
+  when:
+    - percona_mongodb_replset_enabled | bool
+    - percona_mongodb_replset_init | bool
+
+- name: Initialize replica set
+  ansible.builtin.command:
+    cmd: >-
+      mongosh --quiet --host 127.0.0.1 --port {{ percona_mongodb_port }}
+      {% if _percona_mongodb_auth_active | bool %}
+      -u {{ percona_mongodb_admin_user }} -p {{ percona_mongodb_admin_password }} --authenticationDatabase admin
+      {% endif %}
+      --eval "rs.initiate({ _id: process.env.MONGO_RS_NAME, members: JSON.parse(process.env.MONGO_DESIRED_MEMBERS) })"
+  environment:
+    MONGO_RS_NAME: "{{ percona_mongodb_replset_name }}"
+    MONGO_DESIRED_MEMBERS: "{{ _percona_mongodb_desired_members | to_json }}"
+  register: _percona_mongodb_rs_init_result
+  when:
+    - percona_mongodb_replset_enabled | bool
+    - percona_mongodb_replset_init | bool
+    - (_percona_mongodb_rs_status_check.stdout | trim) == 'UNINITIALIZED'
+  changed_when: true
+
+- name: Wait for replica set primary election
+  ansible.builtin.command:
+    cmd: >-
+      mongosh --quiet --host 127.0.0.1 --port {{ percona_mongodb_port }}
+      {% if _percona_mongodb_auth_active | bool %}
+      -u {{ percona_mongodb_admin_user }} -p {{ percona_mongodb_admin_password }} --authenticationDatabase admin
+      {% endif %}
+      --eval "db.hello().isWritablePrimary"
+  register: _percona_mongodb_primary_check
+  retries: 30
+  delay: 2
+  until:
+    - _percona_mongodb_primary_check.rc == 0
+    - "'true' in _percona_mongodb_primary_check.stdout"
+  changed_when: false
+  no_log: true
+  when:
+    - percona_mongodb_replset_enabled | bool
+    - percona_mongodb_replset_init | bool
+
+- name: Reconcile replica set configuration if members differ
+  ansible.builtin.command:
+    cmd: >-
+      mongosh --quiet --host 127.0.0.1 --port {{ percona_mongodb_port }}
+      {% if _percona_mongodb_auth_active | bool %}
+      -u {{ percona_mongodb_admin_user }} -p {{ percona_mongodb_admin_password }} --authenticationDatabase admin
+      {% endif %}
+      --eval "
+      const desired = JSON.parse(process.env.MONGO_DESIRED_MEMBERS);
+      const conf = rs.conf();
+      let diff = false;
+      let diffReason = '';
+      if (!conf || !conf.members) {
+        diff = true;
+        diffReason = 'no_conf_members';
+      } else if (conf.members.length !== desired.length) {
+        diff = true;
+        diffReason = 'length_diff: ' + conf.members.length + ' vs ' + desired.length;
+      } else {
+        for (let i = 0; i < desired.length; i++) {
+          const d = desired[i];
+          const c = conf.members.find(m => m._id === d._id || m.host === d.host);
+          if (!c) { diff = true; diffReason = 'no_match for ' + JSON.stringify(d); break; }
+          if (c.host !== d.host) { diff = true; diffReason = 'host_mismatch: ' + c.host + ' vs ' + d.host; break; }
+          if (d.priority !== undefined && c.priority !== d.priority) { diff = true; diffReason = 'priority'; break; }
+          if (d.arbiterOnly !== undefined && c.arbiterOnly !== d.arbiterOnly) { diff = true; diffReason = 'arbiter'; break; }
+          if (d.hidden !== undefined && c.hidden !== d.hidden) { diff = true; diffReason = 'hidden'; break; }
+          if (d.votes !== undefined && c.votes !== d.votes) { diff = true; diffReason = 'votes'; break; }
+        }
+      }
+      if (!diff) {
+        print('NO_CHANGE');
+      } else {
+        conf.version++;
+        conf.members = desired.map((d, idx) => {
+          const existing = conf.members.find(m => m._id === d._id || m.host === d.host) || {};
+          const merged = Object.assign({}, existing, d);
+          if (merged._id === undefined) merged._id = idx;
+          return merged;
+        });
+        const res = rs.reconfig(conf);
+        if (res.ok) {
+          print('MODIFIED');
+        } else {
+          const forceRes = rs.reconfig(conf, { force: true });
+          if (forceRes.ok) { print('MODIFIED'); } else { throw new Error(JSON.stringify(res)); }
+        }
+      }"
+  environment:
+    MONGO_DESIRED_MEMBERS: "{{ _percona_mongodb_desired_members | to_json }}"
+  register: _percona_mongodb_rs_reconfig
+  when:
+    - percona_mongodb_replset_enabled | bool
+    - percona_mongodb_replset_init | bool
+    - (_percona_mongodb_rs_status_check.stdout | trim) == 'INITIALIZED'
+  changed_when: "'MODIFIED' in _percona_mongodb_rs_reconfig.stdout"
+  no_log: true

@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for percona_mongodb configuration
+
+- name: Check if MongoDB keyfile exists
+  ansible.builtin.stat:
+    path: "{{ percona_mongodb_keyfile_path }}"
+  register: _percona_mongodb_keyfile_stat
+  when:
+    - percona_mongodb_replset_enabled | bool
+    - percona_mongodb_auth_enabled | bool
+
+- name: Write provided MongoDB keyfile content
+  ansible.builtin.copy:
+    content: "{{ percona_mongodb_keyfile_content }}\n"
+    dest: "{{ percona_mongodb_keyfile_path }}"
+    owner: "{{ percona_mongodb_user }}"
+    group: "{{ percona_mongodb_group }}"
+    mode: '0400'
+  when:
+    - percona_mongodb_replset_enabled | bool
+    - percona_mongodb_auth_enabled | bool
+    - percona_mongodb_keyfile_content | length > 0
+  notify: "restart mongod"
+
+- name: Auto-generate MongoDB keyfile for single-instance replica set
+  ansible.builtin.command:
+    cmd: "openssl rand -base64 756"
+  register: _percona_mongodb_generated_keyfile
+  when:
+    - percona_mongodb_replset_enabled | bool
+    - percona_mongodb_auth_enabled | bool
+    - percona_mongodb_keyfile_content | length == 0
+    - percona_mongodb_replset_members | length <= 1
+    - not _percona_mongodb_keyfile_stat.stat.exists
+  changed_when: true
+
+- name: Save auto-generated MongoDB keyfile
+  ansible.builtin.copy:
+    content: "{{ _percona_mongodb_generated_keyfile.stdout }}\n"
+    dest: "{{ percona_mongodb_keyfile_path }}"
+    owner: "{{ percona_mongodb_user }}"
+    group: "{{ percona_mongodb_group }}"
+    mode: '0400'
+  when:
+    - percona_mongodb_replset_enabled | bool
+    - percona_mongodb_auth_enabled | bool
+    - percona_mongodb_keyfile_content | length == 0
+    - percona_mongodb_replset_members | length <= 1
+    - not _percona_mongodb_keyfile_stat.stat.exists
+  notify: "restart mongod"
+
+- name: Ensure existing MongoDB keyfile has correct ownership and permissions
+  ansible.builtin.file:
+    path: "{{ percona_mongodb_keyfile_path }}"
+    owner: "{{ percona_mongodb_user }}"
+    group: "{{ percona_mongodb_group }}"
+    mode: '0400'
+  when:
+    - percona_mongodb_replset_enabled | bool
+    - percona_mongodb_auth_enabled | bool
+    - _percona_mongodb_keyfile_stat.stat.exists
+
+- name: Render MongoDB configuration file
+  ansible.builtin.template:
+    src: mongod.conf.j2
+    dest: "{{ percona_mongodb_config_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: "restart mongod"
+
+- name: Ensure MongoDB service is enabled and started
+  ansible.builtin.service:
+    name: "{{ percona_mongodb_service_name }}"
+    state: started
+    enabled: true
+
+- name: Flush handlers to apply configuration changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for MongoDB port to become available
+  ansible.builtin.wait_for:
+    host: >-
+      {{ '127.0.0.1' if ('0.0.0.0' in percona_mongodb_bind_ip or '127.0.0.1' in percona_mongodb_bind_ip)
+         else percona_mongodb_bind_ip.split(',')[0].strip() }}
+    port: "{{ percona_mongodb_port }}"
+    state: started
+    timeout: 60

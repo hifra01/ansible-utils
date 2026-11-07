@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: MIT-0
+---
+# defaults file for percona_mongodb
+
+# Percona Server for MongoDB release series ("8.0", "7.0", "6.0", or "psmdb-80", "psmdb-70", "psmdb-60")
+percona_mongodb_version: "8.0"
+
+# Desired package state ("present" or "latest")
+percona_mongodb_package_state: "present"
+
+# Official Percona repository package URLs
+percona_mongodb_apt_release_deb_url: "https://repo.percona.com/apt/percona-release_latest.generic_all.deb"
+percona_mongodb_yum_release_rpm_url: "https://repo.percona.com/yum/percona-release-latest.noarch.rpm"
+
+# Network configuration
+percona_mongodb_bind_ip: "0.0.0.0"
+percona_mongodb_port: 27017
+
+# Storage & WiredTiger tuning (null uses OS/MongoDB defaults)
+percona_mongodb_wiredtiger_cache_size_gb: null
+
+# Additional top-level mongod.conf settings merged recursively
+percona_mongodb_extra_config: {}
+
+# Replica set configuration (enabled by default; supports 1-instance or multi-instance replica sets)
+percona_mongodb_replset_enabled: true
+percona_mongodb_replset_name: "rs0"
+percona_mongodb_replset_init: true
+percona_mongodb_replset_advertise_host: "{{ ansible_facts['default_ipv4']['address'] | default('127.0.0.1') }}"
+percona_mongodb_replset_members: []
+percona_mongodb_oplog_size_mb: null
+
+# Security & authentication configuration
+percona_mongodb_auth_enabled: true
+percona_mongodb_keyfile_path: "/etc/mongod.keyfile"
+percona_mongodb_keyfile_content: ""
+percona_mongodb_admin_user: "admin"
+percona_mongodb_admin_password: "changeme_admin_password"
+
+# Application users provisioned on the replica set initializer or standalone node
+percona_mongodb_users: []

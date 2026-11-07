@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for percona_mongodb repository setup on RedHat family
+
+- name: Install prerequisite packages for RedHat repository setup
+  ansible.builtin.dnf:
+    name: "{{ percona_mongodb_prerequisite_packages }}"
+    state: present
+
+- name: Check if percona-release is installed
+  ansible.builtin.stat:
+    path: /usr/bin/percona-release
+  register: _percona_mongodb_release_stat
+
+- name: Install percona-release repository package on RedHat
+  ansible.builtin.dnf:
+    name: "{{ percona_mongodb_yum_release_rpm_url }}"
+    state: present
+    disable_gpg_check: true
+  when: not _percona_mongodb_release_stat.stat.exists
+
+- name: Check if target Percona YUM/DNF repository is configured
+  ansible.builtin.stat:
+    path: "/etc/yum.repos.d/percona-{{ _percona_mongodb_repo_product }}-release.repo"
+  register: _percona_mongodb_yum_repo_stat
+
+- name: Enable Percona Server repository on RedHat
+  ansible.builtin.command:
+    cmd: "percona-release enable-only {{ _percona_mongodb_repo_product }} release"
+  when: not _percona_mongodb_yum_repo_stat.stat.exists
+  changed_when: true

@@ -1,0 +1,23 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  tasks:
+    - name: Include hifra01.utils.percona_mongodb
+      ansible.builtin.include_role:
+        name: hifra01.utils.percona_mongodb
+      vars:
+        percona_mongodb_version: "8.0"
+        percona_mongodb_replset_enabled: true
+        percona_mongodb_replset_name: "rs0"
+        percona_mongodb_replset_members: []
+        percona_mongodb_oplog_size_mb: 256
+        percona_mongodb_auth_enabled: true
+        percona_mongodb_admin_user: "admin"
+        percona_mongodb_admin_password: "MoleculeAdminPass!2026"
+        percona_mongodb_users:
+          - name: "app_user"
+            password: "MoleculeAppPass!2026"
+            database: "app_db"
+            roles:
+              - "readWrite"
