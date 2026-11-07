@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for percona_mongodb user management
+
+- name: Bootstrap MongoDB administrative user
+  ansible.builtin.command:
+    cmd: >-
+      mongosh --quiet --host 127.0.0.1 --port {{ percona_mongodb_port }}
+      --eval "
+      db.getSiblingDB('admin').createUser({
+        user: '{{ percona_mongodb_admin_user }}',
+        pwd: '{{ percona_mongodb_admin_password }}',
+        roles: [
+          { role: 'root', db: 'admin' },
+          { role: 'userAdminAnyDatabase', db: 'admin' },
+          { role: 'clusterAdmin', db: 'admin' }
+        ]
+      })"
+  register: _percona_mongodb_admin_create
+  when:
+    - percona_mongodb_auth_enabled | bool
+    - not (_percona_mongodb_auth_active | default(false) | bool)
+  changed_when: true
+  no_log: true
+
+- name: Update authentication active fact
+  ansible.builtin.set_fact:
+    _percona_mongodb_auth_active: true
+  when:
+    - percona_mongodb_auth_enabled | bool
+    - not (_percona_mongodb_auth_active | default(false) | bool)
+
+- name: Validate percona_mongodb_users items
+  ansible.builtin.assert:
+    that:
+      - item.name is defined
+      - item.name | length > 0
+      - (item.state | default('present')) in ['present', 'absent']
+      - (item.state | default('present') == 'absent') or (item.password is defined and item.password | length > 0)
+      - (item.state | default('present') == 'absent') or (item.roles is defined and item.roles | length > 0)
+    fail_msg: "Invalid percona_mongodb_users definition for user: {{ item.name | default('undefined') }}"
+  loop: "{{ percona_mongodb_users }}"
+  loop_control:
+    label: "{{ item.name | default('undefined') }}"
+
+- name: Manage declared MongoDB application users
+  ansible.builtin.include_tasks: user-item.yml
+  loop: "{{ percona_mongodb_users }}"
+  loop_control:
+    loop_var: mongodb_user
+    label: "{{ mongodb_user.name }}"

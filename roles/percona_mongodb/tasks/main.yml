@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for percona_mongodb
+
+- name: Validate supported platform
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] in ['Debian', 'RedHat']
+    fail_msg: "This role only supports Debian and RedHat family systems."
+
+- name: Load OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_facts['os_family'] }}.yml"
+
+- name: Determine Percona repository product code
+  ansible.builtin.set_fact:
+    _percona_mongodb_repo_product: "{{ _percona_mongodb_repo_map[percona_mongodb_version | string] | default(percona_mongodb_version) }}"
+
+- name: Validate role configuration inputs
+  ansible.builtin.assert:
+    that:
+      - _percona_mongodb_repo_product in ['psmdb-80', 'psmdb-70', 'psmdb-60']
+      - percona_mongodb_package_state in ['present', 'latest']
+      - percona_mongodb_port | int >= 1 and percona_mongodb_port | int <= 65535
+      - percona_mongodb_bind_ip | length > 0
+      - (not (percona_mongodb_replset_enabled | bool)) or (percona_mongodb_replset_name | length > 0)
+      - (not (percona_mongodb_replset_enabled | bool)) or (percona_mongodb_replset_advertise_host | length > 0)
+      - (not (percona_mongodb_auth_enabled | bool)) or (percona_mongodb_admin_user | length > 0)
+      - (not (percona_mongodb_auth_enabled | bool)) or (percona_mongodb_admin_password | length > 0)
+      - >-
+        not ((percona_mongodb_replset_enabled | bool) and (percona_mongodb_auth_enabled | bool) and
+             (percona_mongodb_replset_members | length > 1) and (percona_mongodb_keyfile_content | length == 0))
+      - (percona_mongodb_oplog_size_mb is none) or (percona_mongodb_oplog_size_mb | int >= 1)
+      - (percona_mongodb_wiredtiger_cache_size_gb is none) or (percona_mongodb_wiredtiger_cache_size_gb | float > 0)
+    fail_msg: "Pre-flight input validation failed for percona_mongodb role variables."
+
+- name: Validate percona_mongodb_replset_members items
+  ansible.builtin.assert:
+    that:
+      - >-
+        (item is string and item | length > 0) or
+        (item is mapping and item.host is defined and item.host | length > 0)
+      - not (item is mapping and item.priority is defined and (item.priority | float < 0 or item.priority | float > 1000))
+      - not (item is mapping and (item.hidden | default(false) | bool) and (item.priority | default(1) | float != 0))
+      - not (item is mapping and item.votes is defined and (item.votes | int not in [0, 1]))
+    fail_msg: "Invalid percona_mongodb_replset_members item: {{ item }}"
+  loop: "{{ percona_mongodb_replset_members }}"
+  when: percona_mongodb_replset_members | length > 0
+
+- name: Setup Percona repository for {{ ansible_facts['os_family'] }}
+  ansible.builtin.include_tasks: "setup-{{ ansible_facts['os_family'] }}.yml"
+
+- name: Install Percona Server for MongoDB packages
+  ansible.builtin.include_tasks: install.yml
+
+- name: Configure Percona Server for MongoDB
+  ansible.builtin.include_tasks: configure.yml
+
+- name: Manage replica set topology
+  ansible.builtin.include_tasks: replicaset.yml
+  when: percona_mongodb_replset_enabled | bool
+
+- name: Manage MongoDB users
+  ansible.builtin.include_tasks: users.yml
+  when: (not (percona_mongodb_replset_enabled | bool)) or (percona_mongodb_replset_init | bool)

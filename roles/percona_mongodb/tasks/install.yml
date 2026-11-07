@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for percona_mongodb package installation
+
+- name: Install Percona Server for MongoDB packages
+  ansible.builtin.package:
+    name: "{{ percona_mongodb_packages }}"
+    state: "{{ percona_mongodb_package_state }}"
+
+- name: Ensure MongoDB data directory exists with correct ownership
+  ansible.builtin.file:
+    path: "{{ percona_mongodb_db_path }}"
+    state: directory
+    owner: "{{ percona_mongodb_user }}"
+    group: "{{ percona_mongodb_group }}"
+    mode: '0755'
+
+- name: Ensure MongoDB log directory exists with correct ownership
+  ansible.builtin.file:
+    path: "{{ percona_mongodb_log_path | dirname }}"
+    state: directory
+    owner: "{{ percona_mongodb_user }}"
+    group: "{{ percona_mongodb_group }}"
+    mode: '0755'

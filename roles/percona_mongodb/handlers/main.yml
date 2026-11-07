@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: MIT-0
+---
+# handlers file for percona_mongodb
+
+- name: Validate mongod configuration for restart
+  ansible.builtin.command:
+    cmd: "python3 -c \"import yaml; yaml.safe_load(open('{{ percona_mongodb_config_file }}'))\""
+  changed_when: false
+  listen: "restart mongod"
+
+- name: Restart mongod
+  ansible.builtin.service:
+    name: "{{ percona_mongodb_service_name }}"
+    state: restarted
+  listen: "restart mongod"
+
+- name: Wait for MongoDB port after restart
+  ansible.builtin.wait_for:
+    host: >-
+      {{ '127.0.0.1' if ('0.0.0.0' in percona_mongodb_bind_ip or '127.0.0.1' in percona_mongodb_bind_ip)
+         else percona_mongodb_bind_ip.split(',')[0].strip() }}
+    port: "{{ percona_mongodb_port }}"
+    state: started
+    timeout: 60
+  listen: "restart mongod"

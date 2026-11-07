@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: MIT-0
+# Managed by Ansible (hifra01.utils.percona_mongodb)
+---
+{% set _base_config = {
+  'net': {
+    'bindIp': percona_mongodb_bind_ip,
+    'port': percona_mongodb_port | int
+  },
+  'processManagement': {
+    'fork': percona_mongodb_process_fork | bool,
+    'pidFilePath': percona_mongodb_pid_file_path
+  },
+  'storage': {
+    'dbPath': percona_mongodb_db_path
+  },
+  'systemLog': {
+    'destination': 'file',
+    'logAppend': true,
+    'path': percona_mongodb_log_path
+  }
+} %}
+{% if percona_mongodb_wiredtiger_cache_size_gb is not none %}
+{% set _ = _base_config['storage'].update({'wiredTiger': {'engineConfig': {'cacheSizeGB': percona_mongodb_wiredtiger_cache_size_gb | float}}}) %}
+{% endif %}
+{% if percona_mongodb_replset_enabled | bool %}
+{% set _repl_config = {'replSetName': percona_mongodb_replset_name} %}
+{% if percona_mongodb_oplog_size_mb is not none %}
+{% set _ = _repl_config.update({'oplogSizeMB': percona_mongodb_oplog_size_mb | int}) %}
+{% endif %}
+{% set _ = _base_config.update({'replication': _repl_config}) %}
+{% endif %}
+{% if percona_mongodb_auth_enabled | bool %}
+{% set _sec_config = {'authorization': 'enabled'} %}
+{% if percona_mongodb_replset_enabled | bool %}
+{% set _ = _sec_config.update({'keyFile': percona_mongodb_keyfile_path}) %}
+{% endif %}
+{% set _ = _base_config.update({'security': _sec_config}) %}
+{% endif %}
+{% set _final_config = _base_config | combine(percona_mongodb_extra_config, recursive=True) %}
+{{ _final_config | to_nice_yaml(indent=2) }}

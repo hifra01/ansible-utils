@@ -1,0 +1,101 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for managing an individual MongoDB application user
+
+- name: Normalize roles for user {{ mongodb_user.name }}
+  ansible.builtin.set_fact:
+    _percona_mongodb_norm_roles: "{{ _norm_roles_raw | from_json }}"
+  vars:
+    _norm_roles_raw: >-
+      {% set norm_roles = [] %}
+      {% for r in mongodb_user.roles | default([]) %}
+        {% if r is string %}
+          {% set _ = norm_roles.append({'role': r, 'db': mongodb_user.database | default('admin')}) %}
+        {% else %}
+          {% set _ = norm_roles.append(r) %}
+        {% endif %}
+      {% endfor %}
+      {{ norm_roles | to_json }}
+
+- name: Reconcile MongoDB user {{ mongodb_user.name }}
+  ansible.builtin.command:
+    cmd: >-
+      mongosh --quiet --host 127.0.0.1 --port {{ percona_mongodb_port }}
+      -u {{ percona_mongodb_admin_user }} -p {{ percona_mongodb_admin_password }}
+      --authenticationDatabase admin
+      --eval "
+      const targetUser = process.env.MONGO_TARGET_USER;
+      const targetPass = process.env.MONGO_TARGET_PASS;
+      const targetDb = process.env.MONGO_TARGET_DB;
+      const targetPort = process.env.MONGO_PORT || '27017';
+      const targetState = process.env.MONGO_TARGET_STATE || 'present';
+      const desiredRoles = JSON.parse(process.env.MONGO_TARGET_ROLES || '[]');
+
+      const dbObj = db.getSiblingDB(targetDb);
+      const userObj = dbObj.getUser(targetUser);
+
+      if (targetState === 'absent') {
+        if (userObj) {
+          dbObj.dropUser(targetUser);
+          print('MODIFIED');
+        } else {
+          print('NO_CHANGE');
+        }
+      } else {
+        if (!userObj) {
+          dbObj.createUser({
+            user: targetUser,
+            pwd: targetPass,
+            roles: desiredRoles
+          });
+          print('MODIFIED');
+        } else {
+          let roleDiff = false;
+          const existingRoles = userObj.roles || [];
+          if (existingRoles.length !== desiredRoles.length) {
+            roleDiff = true;
+          } else {
+            for (const dr of desiredRoles) {
+              if (!existingRoles.some(er => er.role === dr.role && er.db === dr.db)) {
+                roleDiff = true;
+                break;
+              }
+            }
+          }
+          let pwdDiff = false;
+          try {
+            const authUri = 'mongodb://' + encodeURIComponent(targetUser) + ':' +
+                            encodeURIComponent(targetPass) + '@127.0.0.1:' +
+                            targetPort + '/' + encodeURIComponent(targetDb);
+            const testConn = new Mongo(authUri);
+            testConn.getDB(targetDb).runCommand({ ping: 1 });
+            testConn.close();
+          } catch (e) {
+            pwdDiff = true;
+          }
+
+          if (roleDiff || pwdDiff) {
+            const updateData = {};
+            if (pwdDiff) {
+              updateData.pwd = targetPass;
+            }
+            if (roleDiff) {
+              updateData.roles = desiredRoles;
+            }
+            dbObj.updateUser(targetUser, updateData);
+            print('MODIFIED');
+          } else {
+            print('NO_CHANGE');
+          }
+        }
+      }"
+  environment:
+    MONGO_TARGET_USER: "{{ mongodb_user.name }}"
+    MONGO_TARGET_PASS: "{{ mongodb_user.password | default('') }}"
+    MONGO_TARGET_DB: "{{ mongodb_user.database | default('admin') }}"
+    MONGO_PORT: "{{ percona_mongodb_port }}"
+    MONGO_TARGET_STATE: "{{ mongodb_user.state | default('present') }}"
+    MONGO_TARGET_ROLES: "{{ _percona_mongodb_norm_roles | to_json }}"
+  register: _percona_mongodb_user_result
+  changed_when: "'MODIFIED' in _percona_mongodb_user_result.stdout"
+  no_log: true

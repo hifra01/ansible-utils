@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: MIT-0
+---
+# vars file for percona_mongodb (Debian family)
+
+percona_mongodb_prerequisite_packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - openssl
+
+percona_mongodb_packages:
+  - percona-server-mongodb
+
+percona_mongodb_service_name: "mongod"
+percona_mongodb_user: "mongod"
+percona_mongodb_group: "mongod"
+percona_mongodb_config_file: "/etc/mongod.conf"
+percona_mongodb_db_path: "/var/lib/mongodb"
+percona_mongodb_log_path: "/var/log/mongodb/mongod.log"
+percona_mongodb_pid_file_path: "/var/run/mongod.pid"
+percona_mongodb_process_fork: true

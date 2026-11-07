@@ -1,0 +1,114 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Populate service facts
+      ansible.builtin.service_facts:
+
+    - name: Assert mongod service is running and enabled
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services['mongod.service'] is defined
+          - ansible_facts.services['mongod.service'].state == 'running'
+          - ansible_facts.services['mongod.service'].status == 'enabled'
+        fail_msg: "mongod service is not running or enabled"
+
+    - name: Stat /etc/mongod.conf
+      ansible.builtin.stat:
+        path: /etc/mongod.conf
+      register: _conf_stat
+
+    - name: Assert /etc/mongod.conf permissions
+      ansible.builtin.assert:
+        that:
+          - _conf_stat.stat.exists
+          - _conf_stat.stat.mode == '0644'
+          - _conf_stat.stat.pw_name == 'root'
+          - _conf_stat.stat.gr_name == 'root'
+        fail_msg: "/etc/mongod.conf does not have expected ownership or mode"
+
+    - name: Stat /etc/mongod.keyfile
+      ansible.builtin.stat:
+        path: /etc/mongod.keyfile
+      register: _keyfile_stat
+
+    - name: Assert /etc/mongod.keyfile permissions
+      ansible.builtin.assert:
+        that:
+          - _keyfile_stat.stat.exists
+          - _keyfile_stat.stat.mode == '0400'
+          - _keyfile_stat.stat.pw_name == 'mongod'
+          - _keyfile_stat.stat.gr_name == 'mongod'
+        fail_msg: "/etc/mongod.keyfile does not have expected ownership or mode"
+
+    - name: Wait for MongoDB listening port 27017
+      ansible.builtin.wait_for:
+        host: "127.0.0.1"
+        port: 27017
+        state: started
+        timeout: 10
+
+    - name: Test unauthenticated rs.status() rejection
+      ansible.builtin.command:
+        cmd: mongosh --quiet --host 127.0.0.1 --port 27017 --eval "rs.status()"
+      register: _unauth_check
+      failed_when: false
+      changed_when: false
+
+    - name: Assert unauthenticated access is rejected
+      ansible.builtin.assert:
+        that:
+          - _unauth_check.rc != 0
+          - >-
+            ("Unauthorized" in _unauth_check.stderr) or
+            ("requires authentication" in _unauth_check.stderr) or
+            ("Unauthorized" in _unauth_check.stdout) or
+            ("requires authentication" in _unauth_check.stdout)
+        fail_msg: "Unauthenticated query was unexpectedly permitted"
+
+    - name: Query replica set status as admin
+      ansible.builtin.command:
+        cmd: >-
+          mongosh --quiet --host 127.0.0.1 --port 27017
+          -u admin -p "MoleculeAdminPass!2026" --authenticationDatabase admin
+          --eval "const s = rs.status(); print(JSON.stringify({ ok: s.ok, set: s.set, membersCount: s.members.length, myState: s.myState }))"
+      register: _admin_rs_status
+      changed_when: false
+
+    - name: Assert single-instance replica set is PRIMARY
+      ansible.builtin.assert:
+        that:
+          - (_admin_rs_status.stdout | from_json).ok == 1
+          - (_admin_rs_status.stdout | from_json).set == "rs0"
+          - (_admin_rs_status.stdout | from_json).membersCount == 1
+          - (_admin_rs_status.stdout | from_json).myState == 1
+        fail_msg: "Replica set is not in expected PRIMARY single-node state: {{ _admin_rs_status.stdout }}"
+
+    - name: Execute multi-document ACID transaction as app_user
+      ansible.builtin.command:
+        cmd: >-
+          mongosh --quiet --host 127.0.0.1 --port 27017
+          -u app_user -p "MoleculeAppPass!2026" --authenticationDatabase app_db
+          --eval "
+          const session = db.getMongo().startSession();
+          session.startTransaction();
+          try {
+            const coll = session.getDatabase('app_db').getCollection('tx_test');
+            coll.insertOne({ test: 'tx_success', time: new Date() });
+            session.commitTransaction();
+            print('TRANSACTION_COMMITTED');
+          } catch (e) {
+            session.abortTransaction();
+            throw e;
+          } finally {
+            session.endSession();
+          }"
+      register: _app_tx_result
+      changed_when: false
+
+    - name: Assert transaction succeeded
+      ansible.builtin.assert:
+        that:
+          - "'TRANSACTION_COMMITTED' in _app_tx_result.stdout"
+        fail_msg: "Multi-document transaction failed on replica set: {{ _app_tx_result.stdout }}"
