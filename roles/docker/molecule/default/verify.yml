@@ -2,14 +2,247 @@
 - name: Verify
   hosts: all
   tasks:
-    - name: Check if Docker is running
+    - name: Check if Docker service is running
       ansible.builtin.service:
         name: docker
         state: started
       check_mode: true
       register: _docker_service
 
-    - name: Assert Docker is running
+    - name: Assert Docker service is running
       ansible.builtin.assert:
         that:
           - not _docker_service.changed
+
+    - name: Verify docker compose CLI version
+      ansible.builtin.command:
+        cmd: docker compose version
+      register: _docker_compose_version
+      changed_when: false
+
+    - name: Assert docker compose CLI is functional
+      ansible.builtin.assert:
+        that:
+          - _docker_compose_version.rc == 0
+          - "'Docker Compose version' in _docker_compose_version.stdout"
+
+    # US1: Verify webapp in default /srv/webapp
+    - name: Stat /srv/webapp/compose.yml
+      ansible.builtin.stat:
+        path: /srv/webapp/compose.yml
+      register: _webapp_compose_stat
+
+    - name: Stat /srv/webapp/.env
+      ansible.builtin.stat:
+        path: /srv/webapp/.env
+      register: _webapp_env_stat
+
+    - name: Assert /srv/webapp files and permissions
+      ansible.builtin.assert:
+        that:
+          - _webapp_compose_stat.stat.exists
+          - _webapp_compose_stat.stat.mode == '0644'
+          - _webapp_compose_stat.stat.pw_name == 'root'
+          - _webapp_env_stat.stat.exists
+          - _webapp_env_stat.stat.mode == '0600'
+          - _webapp_env_stat.stat.pw_name == 'root'
+
+    - name: Check running services for webapp
+      ansible.builtin.command:
+        cmd: docker compose -f /srv/webapp/compose.yml ps --services --status running
+      register: _webapp_running
+      changed_when: false
+
+    - name: Assert webapp service container is running
+      ansible.builtin.assert:
+        that:
+          - "'web' in _webapp_running.stdout_lines"
+
+    # US2: Verify templated_app in custom path /srv/custom-stack/docker-compose.yml with custom owner/group
+    - name: Stat /srv/custom-stack directory
+      ansible.builtin.stat:
+        path: /srv/custom-stack
+      register: _custom_dir_stat
+
+    - name: Stat /srv/custom-stack/docker-compose.yml
+      ansible.builtin.stat:
+        path: /srv/custom-stack/docker-compose.yml
+      register: _custom_compose_stat
+
+    - name: Slurp /srv/custom-stack/docker-compose.yml content
+      ansible.builtin.slurp:
+        path: /srv/custom-stack/docker-compose.yml
+      register: _custom_compose_content
+
+    - name: Check running services for templated_app
+      ansible.builtin.command:
+        cmd: docker compose -f /srv/custom-stack/docker-compose.yml ps --services --status running
+      register: _custom_running
+      changed_when: false
+
+    - name: Assert templated_app container, custom owner/group, and interpolated variables
+      ansible.builtin.assert:
+        that:
+          - _custom_dir_stat.stat.exists
+          - _custom_dir_stat.stat.mode == '0755'
+          - _custom_dir_stat.stat.pw_name == 'composeuser'
+          - _custom_dir_stat.stat.gr_name == 'composegroup'
+          - _custom_compose_stat.stat.exists
+          - _custom_compose_stat.stat.mode == '0644'
+          - _custom_compose_stat.stat.pw_name == 'composeuser'
+          - _custom_compose_stat.stat.gr_name == 'composegroup'
+          - "'custom_templated running on port 9090' in (_custom_compose_content.content | b64decode)"
+          - "'app' in _custom_running.stdout_lines"
+
+    # US2: Configuration update reconciliation and follow-up idempotency
+    - name: "Apply configuration update to webapp (.env modification)"
+      ansible.builtin.include_role:
+        name: "hifra01.utils.docker"
+      vars:
+        docker_daemon_config:
+          storage-driver: "vfs"
+        docker_compose_projects:
+          - name: webapp
+            state: present
+            env:
+              APP_PORT: "8081"
+              APP_MSG: "updated_webapp_message"
+            content: |
+              services:
+                web:
+                  image: busybox:latest
+                  command: ["sh", "-c", "echo ${APP_MSG} on port ${APP_PORT}; sleep 3600"]
+                  restart: unless-stopped
+
+    - name: Slurp /srv/webapp/.env content after update
+      ansible.builtin.slurp:
+        path: /srv/webapp/.env
+      register: _webapp_updated_env
+
+    - name: Assert .env was updated
+      ansible.builtin.assert:
+        that:
+          - "'APP_PORT=8081' in (_webapp_updated_env.content | b64decode)"
+          - "'APP_MSG=updated_webapp_message' in (_webapp_updated_env.content | b64decode)"
+
+    - name: Check running services for webapp after update
+      ansible.builtin.command:
+        cmd: docker compose -f /srv/webapp/compose.yml ps --services --status running
+      register: _webapp_running_after_update
+      changed_when: false
+
+    - name: Assert webapp service is still running after configuration update
+      ansible.builtin.assert:
+        that:
+          - "'web' in _webapp_running_after_update.stdout_lines"
+
+    - name: Stat /srv/webapp/.env before repeat run
+      ansible.builtin.stat:
+        path: /srv/webapp/.env
+      register: _webapp_env_stat_before_repeat
+
+    - name: "Re-apply same configuration to test idempotency"
+      ansible.builtin.include_role:
+        name: "hifra01.utils.docker"
+      vars:
+        docker_daemon_config:
+          storage-driver: "vfs"
+        docker_compose_projects:
+          - name: webapp
+            state: present
+            env:
+              APP_PORT: "8081"
+              APP_MSG: "updated_webapp_message"
+            content: |
+              services:
+                web:
+                  image: busybox:latest
+                  command: ["sh", "-c", "echo ${APP_MSG} on port ${APP_PORT}; sleep 3600"]
+                  restart: unless-stopped
+
+    - name: Stat /srv/webapp/.env after repeat run
+      ansible.builtin.stat:
+        path: /srv/webapp/.env
+      register: _webapp_env_stat_after_repeat
+
+    - name: Assert follow-up run was idempotent (.env mtime unchanged)
+      ansible.builtin.assert:
+        that:
+          - _webapp_env_stat_before_repeat.stat.mtime == _webapp_env_stat_after_repeat.stat.mtime
+
+    # US3: Verify stopped_app
+    - name: Stat /srv/stopped_app/compose.yml
+      ansible.builtin.stat:
+        path: /srv/stopped_app/compose.yml
+      register: _stopped_compose_stat
+
+    - name: Check running services for stopped_app
+      ansible.builtin.command:
+        cmd: docker compose -f /srv/stopped_app/compose.yml ps --services --status running
+      register: _stopped_running
+      changed_when: false
+
+    - name: Assert stopped_app files exist but no containers running
+      ansible.builtin.assert:
+        that:
+          - _stopped_compose_stat.stat.exists
+          - _stopped_running.stdout_lines | length == 0
+
+    # Non-destructive check: verify /srv/unmanaged-data/keep.txt remains untouched
+    - name: Stat /srv/unmanaged-data/keep.txt
+      ansible.builtin.stat:
+        path: /srv/unmanaged-data/keep.txt
+      register: _unmanaged_stat
+
+    - name: Assert unmanaged /srv data is preserved
+      ansible.builtin.assert:
+        that:
+          - _unmanaged_stat.stat.exists
+
+    # Lifecycle test: test state: absent teardown
+    - name: "Test teardown of webapp via role with state: absent"
+      ansible.builtin.include_role:
+        name: "hifra01.utils.docker"
+      vars:
+        docker_compose_projects:
+          - name: webapp
+            state: absent
+            remove_dir: false
+
+    - name: Stat /srv/webapp/compose.yml after state absent
+      ansible.builtin.stat:
+        path: /srv/webapp/compose.yml
+      register: _webapp_compose_stat_after
+
+    - name: Stat /srv/webapp directory after state absent
+      ansible.builtin.stat:
+        path: /srv/webapp
+      register: _webapp_dir_stat_after
+
+    - name: Assert webapp compose.yml removed but /srv/webapp directory preserved
+      ansible.builtin.assert:
+        that:
+          - not _webapp_compose_stat_after.stat.exists
+          - _webapp_dir_stat_after.stat.exists
+
+    - name: "Test full purge of templated_app with remove_dir: true"
+      ansible.builtin.include_role:
+        name: "hifra01.utils.docker"
+      vars:
+        docker_compose_projects:
+          - name: templated_app
+            path: /srv/custom-stack
+            filename: docker-compose.yml
+            state: absent
+            remove_volumes: true
+            remove_dir: true
+
+    - name: Stat /srv/custom-stack directory after full purge
+      ansible.builtin.stat:
+        path: /srv/custom-stack
+      register: _custom_dir_stat_after
+
+    - name: Assert /srv/custom-stack was completely removed
+      ansible.builtin.assert:
+        that:
+          - not _custom_dir_stat_after.stat.exists

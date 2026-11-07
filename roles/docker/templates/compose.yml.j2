@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: MIT-0
+{% if compose_project.template is defined %}
+{{ lookup('ansible.builtin.template', compose_project.template, template_vars=(compose_project.vars | default({})) | combine({'item': compose_project, 'compose_project': compose_project})) }}
+{% elif compose_project.content is mapping %}
+{{ compose_project.content | to_nice_yaml(indent=2) }}
+{% elif compose_project.content is string %}
+{{ compose_project.content }}
+{% endif %}

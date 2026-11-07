@@ -1,6 +1,7 @@
 ---
 dependency:
   name: galaxy
+  enabled: false
 driver:
   name: docker
 platforms:
@@ -18,9 +19,13 @@ provisioner:
   config_options:
     defaults:
       become_method: su
+  env:
+    ANSIBLE_COLLECTIONS_PATH: "/Users/hill/.t3/worktrees/utils/t3-555f5bda/.ansible_collections_isolated:~/.ansible/collections:/usr/share/ansible/collections"
   inventory:
     host_vars:
       localhost:
         ansible_python_interpreter: "{{ ansible_playbook_python }}"
 verifier:
   name: ansible
+  env:
+    ANSIBLE_COLLECTIONS_PATH: "/Users/hill/.t3/worktrees/utils/t3-555f5bda/.ansible_collections_isolated:~/.ansible/collections:/usr/share/ansible/collections"

@@ -9,3 +9,26 @@
           command -v python3.9 >/dev/null 2>&1 || dnf install -y python39
         fi
       changed_when: false
+
+    - name: Create test group for custom ownership
+      ansible.builtin.group:
+        name: composegroup
+        state: present
+
+    - name: Create test user for custom ownership
+      ansible.builtin.user:
+        name: composeuser
+        group: composegroup
+        state: present
+
+    - name: Create pre-existing unmanaged directory in /srv
+      ansible.builtin.file:
+        path: /srv/unmanaged-data
+        state: directory
+        mode: '0755'
+
+    - name: Create marker file inside unmanaged /srv directory
+      ansible.builtin.copy:
+        dest: /srv/unmanaged-data/keep.txt
+        content: "preserve-me\n"
+        mode: '0644'

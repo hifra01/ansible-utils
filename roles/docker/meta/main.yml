@@ -2,14 +2,15 @@
 ---
 galaxy_info:
   author: Hilman F. Rakhmad
-  description: Ansible role to install and configure Docker (CE/EE) with multi-distro support and daemon configuration.
+  description: Ansible role to install and configure Docker (CE/EE) with multi-distro support, daemon configuration, and Docker Compose stack management.
   company: hifra.dev
   license: MIT
 
-  min_ansible_version: "2.10"
+  min_ansible_version: "2.21.0"
 
   galaxy_tags:
     - docker
+    - compose
     - system
     - container
 

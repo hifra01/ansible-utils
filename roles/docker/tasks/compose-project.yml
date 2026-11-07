@@ -1,0 +1,156 @@
+# SPDX-License-Identifier: MIT-0
+---
+- name: Set facts for Docker Compose project '{{ compose_project.name }}'
+  ansible.builtin.set_fact:
+    _docker_compose_project_dir: "{{ compose_project.path | default(docker_compose_base_dir ~ '/' ~ compose_project.name) }}"
+    _docker_compose_file_name: "{{ compose_project.filename | default('compose.yml') }}"
+    _docker_compose_state: "{{ compose_project.state | default('present') }}"
+    _docker_compose_owner: "{{ compose_project.owner | default('root') }}"
+    _docker_compose_group: "{{ compose_project.group | default('root') }}"
+
+- name: Set full Compose file path for '{{ compose_project.name }}'
+  ansible.builtin.set_fact:
+    _docker_compose_file_path: "{{ _docker_compose_project_dir }}/{{ _docker_compose_file_name }}"
+    _docker_compose_env_path: "{{ _docker_compose_project_dir }}/.env"
+
+# ----------------------------------------------------------------------------
+# Lifecycle State: present / started / stopped
+# ----------------------------------------------------------------------------
+- name: Manage configuration and lifecycle for non-absent project '{{ compose_project.name }}'
+  when: _docker_compose_state in ['present', 'started', 'stopped']
+  block:
+    - name: Ensure project directory exists for '{{ compose_project.name }}'
+      ansible.builtin.file:
+        path: "{{ _docker_compose_project_dir }}"
+        state: directory
+        owner: "{{ _docker_compose_owner }}"
+        group: "{{ _docker_compose_group }}"
+        mode: '0755'
+
+    - name: Render Docker Compose file from template/content for '{{ compose_project.name }}'
+      ansible.builtin.template:
+        src: compose.yml.j2
+        dest: "{{ _docker_compose_file_path }}"
+        owner: "{{ _docker_compose_owner }}"
+        group: "{{ _docker_compose_group }}"
+        mode: '0644'
+      when: compose_project.src is not defined
+      register: _docker_compose_file_template_result
+
+    - name: Copy static Docker Compose file for '{{ compose_project.name }}'
+      ansible.builtin.copy:
+        src: "{{ compose_project.src }}"
+        dest: "{{ _docker_compose_file_path }}"
+        owner: "{{ _docker_compose_owner }}"
+        group: "{{ _docker_compose_group }}"
+        mode: '0644'
+      when: compose_project.src is defined
+      register: _docker_compose_file_copy_result
+
+    - name: Set file change fact for '{{ compose_project.name }}'
+      ansible.builtin.set_fact:
+        _docker_compose_file_changed: >-
+          {{ (_docker_compose_file_template_result is defined and _docker_compose_file_template_result is changed) or
+             (_docker_compose_file_copy_result is defined and _docker_compose_file_copy_result is changed) }}
+
+    - name: Manage .env file for '{{ compose_project.name }}'
+      when: compose_project.env is defined
+      block:
+        - name: Render .env file for '{{ compose_project.name }}'
+          ansible.builtin.template:
+            src: compose.env.j2
+            dest: "{{ _docker_compose_env_path }}"
+            owner: "{{ _docker_compose_owner }}"
+            group: "{{ _docker_compose_group }}"
+            mode: '0600'
+          register: _docker_compose_env_result
+
+    - name: Set env change fact for '{{ compose_project.name }}'
+      ansible.builtin.set_fact:
+        _docker_compose_env_changed: "{{ _docker_compose_env_result is defined and _docker_compose_env_result is changed }}"
+
+    - name: Validate Docker Compose file for '{{ compose_project.name }}'
+      ansible.builtin.command:
+        cmd: "docker compose -f {{ _docker_compose_file_path }} config -q"
+      changed_when: false
+
+    - name: Query defined services for '{{ compose_project.name }}'
+      ansible.builtin.command:
+        cmd: "docker compose -f {{ _docker_compose_file_path }} config --services"
+      register: _docker_compose_defined_services
+      changed_when: false
+
+    - name: Query running services for '{{ compose_project.name }}'
+      ansible.builtin.command:
+        cmd: "docker compose -f {{ _docker_compose_file_path }} ps --services --status running"
+      register: _docker_compose_running_services
+      changed_when: false
+
+    - name: Determine if any service in '{{ compose_project.name }}' needs to start
+      ansible.builtin.set_fact:
+        _docker_compose_needs_start: >-
+          {{ _docker_compose_file_changed | bool or
+             _docker_compose_env_changed | bool or
+             ((_docker_compose_defined_services.stdout_lines | difference(_docker_compose_running_services.stdout_lines)) | length > 0) or
+             (compose_project.pull | default(false) | bool) or
+             (compose_project.build | default(false) | bool) }}
+
+    - name: Ensure Compose stack is up for '{{ compose_project.name }}'
+      ansible.builtin.command:
+        cmd: >-
+          docker compose -f {{ _docker_compose_file_path }} up -d --remove-orphans
+          {{ '--pull always' if (compose_project.pull | default(false) | bool) else '' }}
+          {{ '--build' if (compose_project.build | default(false) | bool) else '' }}
+      when:
+        - _docker_compose_state in ['present', 'started']
+        - _docker_compose_needs_start | bool
+
+    - name: Ensure Compose stack is stopped for '{{ compose_project.name }}'
+      ansible.builtin.command:
+        cmd: "docker compose -f {{ _docker_compose_file_path }} stop"
+      when:
+        - _docker_compose_state == 'stopped'
+        - _docker_compose_running_services.stdout_lines | length > 0
+
+# ----------------------------------------------------------------------------
+# Lifecycle State: absent
+# ----------------------------------------------------------------------------
+- name: Teardown project '{{ compose_project.name }}'
+  when: _docker_compose_state == 'absent'
+  block:
+    - name: Check if Compose file exists for '{{ compose_project.name }}'
+      ansible.builtin.stat:
+        path: "{{ _docker_compose_file_path }}"
+      register: _docker_compose_stat_file
+
+    - name: Tear down running Compose stack for '{{ compose_project.name }}'
+      when: _docker_compose_stat_file.stat.exists
+      block:
+        - name: Query existing containers for '{{ compose_project.name }}'
+          ansible.builtin.command:
+            cmd: "docker compose -f {{ _docker_compose_file_path }} ps -a -q"
+          register: _docker_compose_containers
+          changed_when: false
+
+        - name: Run docker compose down for '{{ compose_project.name }}'
+          ansible.builtin.command:
+            cmd: >-
+              docker compose -f {{ _docker_compose_file_path }} down --remove-orphans
+              {{ '-v' if (compose_project.remove_volumes | default(false) | bool) else '' }}
+          when: _docker_compose_containers.stdout_lines | length > 0
+
+    - name: Remove managed Compose file for '{{ compose_project.name }}'
+      ansible.builtin.file:
+        path: "{{ _docker_compose_file_path }}"
+        state: absent
+
+    - name: Remove managed .env file for '{{ compose_project.name }}'
+      ansible.builtin.file:
+        path: "{{ _docker_compose_env_path }}"
+        state: absent
+
+    - name: Remove project directory if remove_dir is enabled for '{{ compose_project.name }}'
+      ansible.builtin.file:
+        path: "{{ _docker_compose_project_dir }}"
+        state: absent
+      when: compose_project.remove_dir | default(false) | bool

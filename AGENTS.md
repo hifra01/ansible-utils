@@ -70,7 +70,7 @@ and respect `.specify/memory/constitution.md` as the governing project principle
 | `apt_mirror` | Override APT mirrors (legacy `.list` and DEB822 `.sources`) | Debian only |
 | `consul` | HashiCorp Consul (server/client mode, advertised services) | Debian, RedHat |
 | `datetime` | Install `tzdata`, set timezone (`datetime_tz`) | Debian, RedHat, Alpine, Archlinux |
-| `docker` | Docker CE/EE repo, install, `daemon.json`, docker group users | Debian, RedHat |
+| `docker` | Docker CE/EE repo, install, `daemon.json`, docker group users, Compose stacks (`/srv/<name>`) | Debian, RedHat |
 | `linux_users` | Users/groups/SSH keys/sudo from a catalog + selection list | Debian, RedHat |
 | `nginx` | Nginx + hardened config, dynamic sites (static/proxy/php), Cloudflare IP filter | Debian, RedHat |
 | `percona_mongodb` | Percona Server for MongoDB 8.0, replica set (single/multi-node), keyfile auth, users | Debian, RedHat |

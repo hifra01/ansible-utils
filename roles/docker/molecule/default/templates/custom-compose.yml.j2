@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: MIT-0
+---
+services:
+  app:
+    image: busybox:latest
+    command: ["sh", "-c", "echo custom_templated running on port {{ custom_app_port }}; sleep 3600"]
+    restart: unless-stopped

@@ -13,6 +13,12 @@ docker_daemon_config:
 # List of users to add to the docker group
 docker_users: []
 
+# Base parent directory where Docker Compose projects are saved by default (/srv/<name>)
+docker_compose_base_dir: "/srv"
+
+# List of Docker Compose projects to deploy and manage
+docker_compose_projects: []
+
 # Repository configuration
 docker_repo_url_ce: "https://download.docker.com/linux"
 docker_repo_url_ee: "https://repos.mirantis.com"
