@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for percona_mysql user management
+
+- name: Manage application database users
+  ansible.builtin.include_tasks: user-item.yml
+  loop: "{{ percona_mysql_users }}"
+  loop_control:
+    loop_var: percona_mysql_user_item

@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for percona_mysql replication management
+
+- name: Manage primary (master) replication configuration
+  when:
+    - percona_mysql_role == 'master'
+    - percona_mysql_replication_user | length > 0
+  block:
+    - name: Check if replication user exists
+      ansible.builtin.command:
+        cmd: >-
+          mysql --defaults-file=/root/.my.cnf -N -s -e
+          "SELECT COUNT(*) FROM mysql.user WHERE User='{{ percona_mysql_replication_user }}' AND Host='{{ percona_mysql_replication_host }}';"
+      register: _percona_mysql_repl_user_exists
+      changed_when: false
+
+    - name: Create replication user on primary node
+      ansible.builtin.command:
+        cmd: >-
+          mysql --defaults-file=/root/.my.cnf -e
+          "CREATE USER '{{ percona_mysql_replication_user }}'@'{{ percona_mysql_replication_host }}'
+          IDENTIFIED BY {{ percona_mysql_replication_password | quote }};"
+      when: _percona_mysql_repl_user_exists.stdout | int == 0
+      changed_when: true
+
+    - name: Check replication user grants
+      ansible.builtin.command:
+        cmd: >-
+          mysql --defaults-file=/root/.my.cnf -N -s -e
+          "SHOW GRANTS FOR '{{ percona_mysql_replication_user }}'@'{{ percona_mysql_replication_host }}';"
+      register: _percona_mysql_repl_grants
+      changed_when: false
+
+    - name: Grant replication privileges to replication user
+      ansible.builtin.command:
+        cmd: >-
+          mysql --defaults-file=/root/.my.cnf -e
+          "GRANT REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO
+          '{{ percona_mysql_replication_user }}'@'{{ percona_mysql_replication_host }}'; FLUSH PRIVILEGES;"
+      when: "'REPLICATION SLAVE' not in _percona_mysql_repl_grants.stdout"
+      changed_when: true
+
+- name: Manage replica replication configuration
+  when:
+    - percona_mysql_role == 'replica'
+    - percona_mysql_source_host | length > 0
+  block:
+    - name: Check current replica status
+      ansible.builtin.command:
+        cmd: mysql --defaults-file=/root/.my.cnf -e "SHOW REPLICA STATUS\G"
+      register: _percona_mysql_replica_status
+      changed_when: false
+      failed_when: false
+
+    - name: Configure replication source on replica node
+      ansible.builtin.command:
+        cmd: >-
+          mysql --defaults-file=/root/.my.cnf -e
+          "STOP REPLICA;
+          CHANGE REPLICATION SOURCE TO
+          SOURCE_HOST='{{ percona_mysql_source_host }}',
+          SOURCE_PORT={{ percona_mysql_source_port }},
+          SOURCE_USER='{{ percona_mysql_replication_user }}',
+          SOURCE_PASSWORD={{ percona_mysql_replication_password | quote }},
+          SOURCE_AUTO_POSITION=1,
+          GET_SOURCE_PUBLIC_KEY=1;"
+      when: >
+        _percona_mysql_replica_status.stdout is not search('Source_Host:\s+' ~ percona_mysql_source_host) or
+        _percona_mysql_replica_status.stdout is not search('Source_Port:\s+' ~ percona_mysql_source_port) or
+        _percona_mysql_replica_status.stdout is not search('Source_User:\s+' ~ percona_mysql_replication_user) or
+        _percona_mysql_replica_status.stdout is not search('Auto_Position:\s+1')
+      changed_when: true
+
+    - name: Re-check replica status before starting threads
+      ansible.builtin.command:
+        cmd: mysql --defaults-file=/root/.my.cnf -e "SHOW REPLICA STATUS\G"
+      register: _percona_mysql_replica_status_updated
+      changed_when: false
+      failed_when: false
+
+    - name: Start replica threads
+      ansible.builtin.command:
+        cmd: mysql --defaults-file=/root/.my.cnf -e "START REPLICA;"
+      when:
+        - percona_mysql_replica_start_replication
+        - (_percona_mysql_replica_status_updated.stdout is not search('Replica_IO_Running:\s+Yes') or
+           _percona_mysql_replica_status_updated.stdout is not search('Replica_SQL_Running:\s+Yes'))
+      changed_when: true

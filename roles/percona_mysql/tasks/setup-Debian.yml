@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for percona_mysql repository setup on Debian family
+
+- name: Install prerequisite packages for Debian repository setup
+  ansible.builtin.apt:
+    name: "{{ percona_mysql_prerequisite_packages }}"
+    state: present
+    update_cache: true
+
+- name: Check if percona-release is installed
+  ansible.builtin.stat:
+    path: /usr/bin/percona-release
+  register: _percona_mysql_release_stat
+
+- name: Install percona-release repository package on Debian
+  when: not _percona_mysql_release_stat.stat.exists
+  block:
+    - name: Download percona-release deb package
+      ansible.builtin.get_url:
+        url: "{{ percona_mysql_apt_release_deb_url }}"
+        dest: /tmp/percona-release_latest.generic_all.deb
+        mode: '0644'
+
+    - name: Install percona-release package
+      ansible.builtin.apt:
+        deb: /tmp/percona-release_latest.generic_all.deb
+        state: present
+
+    - name: Remove temporary percona-release deb package
+      ansible.builtin.file:
+        path: /tmp/percona-release_latest.generic_all.deb
+        state: absent
+
+- name: Check if target Percona APT repository is configured
+  ansible.builtin.stat:
+    path: "/etc/apt/sources.list.d/percona-{{ percona_mysql_repo_product }}-release.list"
+  register: _percona_mysql_apt_repo_stat
+
+- name: Enable Percona Server repository on Debian
+  when: not _percona_mysql_apt_repo_stat.stat.exists
+  block:
+    - name: Run percona-release enable-only
+      ansible.builtin.command:
+        cmd: "percona-release enable-only {{ percona_mysql_repo_product }} release"
+      changed_when: true
+
+    - name: Update apt cache after repository configuration
+      ansible.builtin.apt:
+        update_cache: true

@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for managing a single percona_mysql database item
+
+- name: Validate database item name
+  ansible.builtin.assert:
+    that:
+      - percona_mysql_db.name is defined
+      - percona_mysql_db.name | length > 0
+    fail_msg: "Database item must have a valid 'name' attribute."
+
+- name: Check database existence and charset/collation
+  ansible.builtin.command:
+    cmd: >-
+      mysql --defaults-file=/root/.my.cnf -N -s -e
+      "SELECT DEFAULT_CHARACTER_SET_NAME, DEFAULT_COLLATION_NAME
+       FROM information_schema.SCHEMATA
+       WHERE SCHEMA_NAME = '{{ percona_mysql_db.name }}';"
+  register: _percona_mysql_db_info
+  changed_when: false
+
+- name: Create database when absent and state is present
+  ansible.builtin.command:
+    cmd: >-
+      mysql --defaults-file=/root/.my.cnf -e
+      "CREATE DATABASE `{{ percona_mysql_db.name }}`
+       CHARACTER SET {{ percona_mysql_db.encoding | default(percona_mysql_db.charset | default('utf8mb4')) }}
+       COLLATE {{ percona_mysql_db.collation | default('utf8mb4_unicode_ci') }};"
+  when:
+    - (percona_mysql_db.state | default('present')) == 'present'
+    - _percona_mysql_db_info.stdout | length == 0
+  changed_when: true
+
+- name: Alter database charset/collation if different
+  ansible.builtin.command:
+    cmd: >-
+      mysql --defaults-file=/root/.my.cnf -e
+      "ALTER DATABASE `{{ percona_mysql_db.name }}`
+       CHARACTER SET {{ percona_mysql_db.encoding | default(percona_mysql_db.charset | default('utf8mb4')) }}
+       COLLATE {{ percona_mysql_db.collation | default('utf8mb4_unicode_ci') }};"
+  when:
+    - (percona_mysql_db.state | default('present')) == 'present'
+    - _percona_mysql_db_info.stdout | length > 0
+    - >
+      (_percona_mysql_db_info.stdout.split()[0] != (percona_mysql_db.encoding | default(percona_mysql_db.charset | default('utf8mb4')))) or
+      (_percona_mysql_db_info.stdout.split()[1] != (percona_mysql_db.collation | default('utf8mb4_unicode_ci')))
+  changed_when: true
+
+- name: Drop database when state is absent
+  ansible.builtin.command:
+    cmd: "mysql --defaults-file=/root/.my.cnf -e \"DROP DATABASE IF EXISTS `{{ percona_mysql_db.name }}`;\""
+  when:
+    - (percona_mysql_db.state | default('present')) == 'absent'
+    - _percona_mysql_db_info.stdout | length > 0
+  changed_when: true

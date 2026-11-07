@@ -50,6 +50,7 @@ jobs:
       linux_users: ${{ steps.filter.outputs.linux_users }}
       nginx: ${{ steps.filter.outputs.nginx }}
       percona_mongodb: ${{ steps.filter.outputs.percona_mongodb }}
+      percona_mysql: ${{ steps.filter.outputs.percona_mysql }}
       php: ${{ steps.filter.outputs.php }}
     steps:
       - name: Checkout code
@@ -74,6 +75,8 @@ jobs:
               - 'roles/nginx/**'
             percona_mongodb:
               - 'roles/percona_mongodb/**'
+            percona_mysql:
+              - 'roles/percona_mysql/**'
             php:
               - 'roles/php/**'
 
@@ -93,6 +96,7 @@ jobs:
           - linux_users
           - nginx
           - percona_mongodb
+          - percona_mysql
           - php
         distro:
           - ubuntu2204
@@ -134,6 +138,7 @@ jobs:
             linux_users) changed="${{ needs.detect-changes.outputs.linux_users }}" ;;
             nginx)       changed="${{ needs.detect-changes.outputs.nginx }}" ;;
             percona_mongodb) changed="${{ needs.detect-changes.outputs.percona_mongodb }}" ;;
+            percona_mysql) changed="${{ needs.detect-changes.outputs.percona_mysql }}" ;;
             php)         changed="${{ needs.detect-changes.outputs.php }}" ;;
           esac
           if [[ "$changed" == "true" ]]; then

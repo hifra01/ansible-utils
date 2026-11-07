@@ -74,6 +74,7 @@ and respect `.specify/memory/constitution.md` as the governing project principle
 | `linux_users` | Users/groups/SSH keys/sudo from a catalog + selection list | Debian, RedHat |
 | `nginx` | Nginx + hardened config, dynamic sites (static/proxy/php), Cloudflare IP filter | Debian, RedHat |
 | `percona_mongodb` | Percona Server for MongoDB 8.0, replica set (single/multi-node), keyfile auth, users | Debian, RedHat |
+| `percona_mysql` | Percona Server for MySQL (master/replica, GTID replication, users/dbs) | Debian, RedHat |
 | `php` | Multi-version PHP + FPM (Ondřej Surý on Debian/Ubuntu, Remi on RHEL) | Debian, RedHat |
 
 All roles live under `roles/` (never at the repo root or elsewhere). Each role follows the standard

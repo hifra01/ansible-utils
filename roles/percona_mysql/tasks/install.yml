@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for percona_mysql package installation
+
+- name: Install Percona Server for MySQL packages
+  ansible.builtin.package:
+    name: "{{ percona_mysql_packages }}"
+    state: "{{ percona_mysql_package_state }}"
+
+- name: Ensure MySQL configuration include directory exists
+  ansible.builtin.file:
+    path: "{{ percona_mysql_config_include_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Ensure /etc/my.cnf includes drop-in directory on RedHat family
+  ansible.builtin.lineinfile:
+    path: "{{ percona_mysql_main_config_file }}"
+    line: "!includedir {{ percona_mysql_config_include_dir }}"
+    state: present
+    create: true
+    owner: root
+    group: root
+    mode: '0644'
+    unsafe_writes: true
+  when: ansible_facts['os_family'] == 'RedHat'
