@@ -1,0 +1,158 @@
+---
+- name: Verify
+  hosts: all
+  tasks:
+    - name: Check node_exporter binary exists
+      ansible.builtin.stat:
+        path: /usr/local/bin/node_exporter
+      register: _bin_stat
+
+    - name: Assert node_exporter binary exists and has proper permissions
+      ansible.builtin.assert:
+        that:
+          - _bin_stat.stat.exists
+          - _bin_stat.stat.mode == '0755'
+        fail_msg: "/usr/local/bin/node_exporter does not exist or has incorrect permissions."
+
+    - name: Check node_exporter binary version output
+      ansible.builtin.command: /usr/local/bin/node_exporter --version
+      register: _bin_version
+      changed_when: false
+
+    - name: Assert node_exporter binary outputs correct version
+      ansible.builtin.assert:
+        that:
+          - "'node_exporter' in _bin_version.stdout"
+          - "'1.8.2' in _bin_version.stdout"
+        fail_msg: "node_exporter version output does not match expected version 1.8.2."
+
+    - name: Check node_exporter system user and group
+      ansible.builtin.getent:
+        database: passwd
+        key: node_exporter
+
+    - name: Assert node_exporter user shell is nologin
+      ansible.builtin.assert:
+        that:
+          - "'nologin' in ansible_facts.getent_passwd['node_exporter'][5]"
+        fail_msg: "node_exporter user shell is not set to nologin."
+
+    - name: Check node_exporter service status
+      ansible.builtin.service:
+        name: node_exporter
+        state: started
+      check_mode: true
+      register: _service_status
+
+    - name: Assert node_exporter service is running
+      ansible.builtin.assert:
+        that:
+          - not _service_status.changed
+        fail_msg: "node_exporter service is not active."
+
+    - name: Check web configuration file
+      ansible.builtin.stat:
+        path: /etc/node_exporter/config.yml
+      register: _config_stat
+
+    - name: Assert web configuration file exists with 0640 permissions
+      ansible.builtin.assert:
+        that:
+          - _config_stat.stat.exists
+          - _config_stat.stat.mode == '0640'
+        fail_msg: "/etc/node_exporter/config.yml does not exist or has incorrect mode."
+
+    - name: Verify unauthenticated HTTP request is rejected (401 Unauthorized)
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9100/metrics
+        status_code: 401
+      register: _unauth_metrics
+
+    - name: Verify authenticated HTTP request succeeds (200 OK)
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9100/metrics
+        url_username: prometheus
+        url_password: secretpassword
+        force_basic_auth: true
+        return_content: true
+        status_code: 200
+      register: _auth_metrics
+      retries: 5
+      delay: 2
+      until: _auth_metrics.status == 200
+
+    - name: Assert metrics output contains build info
+      ansible.builtin.assert:
+        that:
+          - "'node_exporter_build_info' in _auth_metrics.content"
+        fail_msg: "/metrics does not contain node_exporter_build_info."
+
+    - name: Create a custom textfile metric
+      ansible.builtin.copy:
+        content: "node_exporter_custom_molecule_test_metric 42\n"
+        dest: /var/lib/node_exporter/textfile_collector/molecule_test.prom
+        owner: node_exporter
+        group: node_exporter
+        mode: '0644'
+
+    - name: Scrape metrics again to assert textfile collector exported the metric
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9100/metrics
+        url_username: prometheus
+        url_password: secretpassword
+        force_basic_auth: true
+        return_content: true
+        status_code: 200
+      register: _scraped_textfile_metrics
+      retries: 5
+      delay: 1
+      until: "'node_exporter_custom_molecule_test_metric 42' in _scraped_textfile_metrics.content"
+
+    - name: Assert custom textfile metric is present in scrape
+      ansible.builtin.assert:
+        that:
+          - "'node_exporter_custom_molecule_test_metric 42' in _scraped_textfile_metrics.content"
+        fail_msg: "Custom textfile metric was not exported in /metrics."
+
+    - name: Check systemd service unit contents
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/node_exporter.service
+      register: _service_unit
+
+    - name: Assert collector flags and web config are rendered in systemd unit
+      ansible.builtin.assert:
+        that:
+          - "'--collector.textfile' in (_service_unit.content | b64decode)"
+          - "'--collector.textfile.directory=/var/lib/node_exporter/textfile_collector' in (_service_unit.content | b64decode)"
+          - "'--collector.processes' in (_service_unit.content | b64decode)"
+          - "'--collector.filesystem' in (_service_unit.content | b64decode)"
+          - "'--no-collector.arp' in (_service_unit.content | b64decode)"
+          - "'--web.config.file=/etc/node_exporter/config.yml' in (_service_unit.content | b64decode)"
+        fail_msg: "Systemd unit does not contain expected collector or web configuration flags."
+
+    - name: Test web_config cleanup by converging without web_config
+      ansible.builtin.include_role:
+        name: "hifra01.utils.node_exporter"
+      vars:
+        node_exporter_web_config: {}
+
+    - name: Check if web configuration file was removed
+      ansible.builtin.stat:
+        path: /etc/node_exporter/config.yml
+      register: _cleaned_config_stat
+
+    - name: Assert web configuration file was purged
+      ansible.builtin.assert:
+        that:
+          - not _cleaned_config_stat.stat.exists
+        fail_msg: "/etc/node_exporter/config.yml was not removed when web_config was empty."
+
+    - name: Verify HTTP request succeeds without authentication now
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9100/metrics
+        return_content: true
+        status_code: 200
+      register: _cleaned_metrics
+      retries: 5
+      delay: 2
+      until: _cleaned_metrics.status == 200

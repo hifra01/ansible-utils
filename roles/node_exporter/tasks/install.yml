@@ -1,0 +1,92 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for node_exporter (install)
+
+- name: Update apt cache on Debian family
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Install prerequisite packages
+  ansible.builtin.package:
+    name: "{{ node_exporter_prerequisite_packages }}"
+    state: present
+
+- name: Create node_exporter system group
+  ansible.builtin.group:
+    name: "{{ node_exporter_system_group }}"
+    system: true
+    state: present
+
+- name: Create node_exporter system user
+  ansible.builtin.user:
+    name: "{{ node_exporter_system_user }}"
+    group: "{{ node_exporter_system_group }}"
+    system: true
+    shell: "{{ node_exporter_nologin_shell }}"
+    create_home: false
+    home: /
+    state: present
+
+- name: Check if node_exporter binary already exists
+  ansible.builtin.stat:
+    path: "{{ node_exporter_bin_dir }}/node_exporter"
+  register: _node_exporter_bin_stat
+
+- name: Check installed node_exporter version
+  ansible.builtin.command: "{{ node_exporter_bin_dir }}/node_exporter --version"
+  register: _node_exporter_installed_version
+  changed_when: false
+  failed_when: false
+  when: _node_exporter_bin_stat.stat.exists
+
+- name: Determine if node_exporter download is needed
+  ansible.builtin.set_fact:
+    _node_exporter_download_needed: >-
+      {{
+        not _node_exporter_bin_stat.stat.exists or
+        (node_exporter_version not in (_node_exporter_installed_version.stdout | default('')))
+      }}
+
+- name: Download and install node_exporter binary
+  when: _node_exporter_download_needed | bool
+  block:
+    - name: Create temporary directory for download
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: node_exporter_
+      register: _node_exporter_tempdir
+
+    - name: Download node_exporter release archive
+      ansible.builtin.get_url:
+        url: "{{ node_exporter_download_url }}"
+        dest: "{{ _node_exporter_tempdir.path }}/node_exporter.tar.gz"
+        checksum: "sha256:{{ node_exporter_checksum if (node_exporter_checksum | length > 0) else node_exporter_checksums_url }}"
+        mode: '0644'
+
+    - name: Extract node_exporter release archive
+      ansible.builtin.unarchive:
+        src: "{{ _node_exporter_tempdir.path }}/node_exporter.tar.gz"
+        dest: "{{ _node_exporter_tempdir.path }}"
+        remote_src: true
+
+    - name: Install node_exporter binary to system bin dir
+      ansible.builtin.copy:
+        src: >-
+          {{ _node_exporter_tempdir.path }}/node_exporter-{{ node_exporter_version }}.linux-{{
+          node_exporter_arch_map[ansible_facts['architecture'] | default(ansible_architecture)] |
+          default(ansible_facts['architecture'] | default(ansible_architecture)) }}/node_exporter
+        dest: "{{ node_exporter_bin_dir }}/node_exporter"
+        owner: root
+        group: root
+        mode: '0755'
+        remote_src: true
+      notify: "validate and restart node_exporter"
+
+  always:
+    - name: Clean up temporary download directory
+      ansible.builtin.file:
+        path: "{{ _node_exporter_tempdir.path }}"
+        state: absent
+      when: _node_exporter_tempdir.path is defined

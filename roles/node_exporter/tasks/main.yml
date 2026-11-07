@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for node_exporter
+
+- name: Validate supported platform
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] in ['Debian', 'RedHat']
+    fail_msg: "This role only supports Debian and RedHat family systems."
+
+- name: Validate supported architecture
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['architecture'] in ['x86_64', 'aarch64', 'armv7l']
+    fail_msg: "Unsupported architecture: {{ ansible_facts['architecture'] }}. Supported: x86_64, aarch64, armv7l."
+
+- name: Validate role inputs
+  ansible.builtin.assert:
+    that:
+      - node_exporter_version is string
+      - node_exporter_version | length > 0
+      - (node_exporter_checksum | length == 0) or (node_exporter_checksum is match('^[a-fA-F0-9]{64}$'))
+      - node_exporter_bin_dir is match('^/')
+      - node_exporter_config_dir is match('^/')
+      - (node_exporter_textfile_dir | length == 0) or (node_exporter_textfile_dir is match('^/'))
+      - node_exporter_system_user | string | length > 0
+      - node_exporter_system_group | string | length > 0
+      - node_exporter_web_listen_address | string | length > 0
+      - node_exporter_web_telemetry_path is match('^/')
+      - node_exporter_enabled_collectors is sequence
+      - node_exporter_disabled_collectors is sequence
+      - node_exporter_extra_flags is sequence
+      - node_exporter_web_config is mapping
+    fail_msg: >-
+      Invalid node_exporter_* role variables: check version, checksum (64 hex characters if set),
+      absolute paths for bin_dir/config_dir/textfile_dir, telemetry path starting with '/',
+      non-empty system_user/group/web_listen_address, lists for collectors and extra_flags,
+      and dictionary for web_config.
+
+- name: Load OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_facts['os_family'] }}.yml"
+
+- name: Install node_exporter binary and system account
+  ansible.builtin.include_tasks: install.yml
+
+- name: Configure node_exporter service and directories
+  ansible.builtin.include_tasks: configure.yml

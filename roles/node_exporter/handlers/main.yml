@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: MIT-0
+---
+# handlers file for node_exporter
+
+- name: Reload systemd daemon for node_exporter
+  ansible.builtin.systemd:
+    daemon_reload: true
+  listen: "validate and restart node_exporter"
+
+- name: Validate node_exporter binary before restart
+  ansible.builtin.command: "{{ node_exporter_bin_dir }}/node_exporter --version"
+  changed_when: false
+  listen: "validate and restart node_exporter"
+
+- name: Restart node_exporter
+  ansible.builtin.service:
+    name: "{{ node_exporter_service_name }}"
+    state: restarted
+  listen: "validate and restart node_exporter"

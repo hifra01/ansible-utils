@@ -49,6 +49,7 @@ jobs:
       docker: ${{ steps.filter.outputs.docker }}
       linux_users: ${{ steps.filter.outputs.linux_users }}
       nginx: ${{ steps.filter.outputs.nginx }}
+      node_exporter: ${{ steps.filter.outputs.node_exporter }}
       percona_mongodb: ${{ steps.filter.outputs.percona_mongodb }}
       percona_mysql: ${{ steps.filter.outputs.percona_mysql }}
       php: ${{ steps.filter.outputs.php }}
@@ -73,6 +74,8 @@ jobs:
               - 'roles/linux_users/**'
             nginx:
               - 'roles/nginx/**'
+            node_exporter:
+              - 'roles/node_exporter/**'
             percona_mongodb:
               - 'roles/percona_mongodb/**'
             percona_mysql:
@@ -95,6 +98,7 @@ jobs:
           - docker
           - linux_users
           - nginx
+          - node_exporter
           - percona_mongodb
           - percona_mysql
           - php
@@ -137,6 +141,7 @@ jobs:
             docker)      changed="${{ needs.detect-changes.outputs.docker }}" ;;
             linux_users) changed="${{ needs.detect-changes.outputs.linux_users }}" ;;
             nginx)       changed="${{ needs.detect-changes.outputs.nginx }}" ;;
+            node_exporter) changed="${{ needs.detect-changes.outputs.node_exporter }}" ;;
             percona_mongodb) changed="${{ needs.detect-changes.outputs.percona_mongodb }}" ;;
             percona_mysql) changed="${{ needs.detect-changes.outputs.percona_mysql }}" ;;
             php)         changed="${{ needs.detect-changes.outputs.php }}" ;;
