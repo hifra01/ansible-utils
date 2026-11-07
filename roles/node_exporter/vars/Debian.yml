@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: MIT-0
+---
+# vars file for node_exporter (Debian family)
+
+node_exporter_prerequisite_packages:
+  - ca-certificates
+  - curl
+  - tar
+
+node_exporter_service_name: "node_exporter"
+node_exporter_nologin_shell: "/usr/sbin/nologin"

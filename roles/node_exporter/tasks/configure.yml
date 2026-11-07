@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for node_exporter (configure)
+
+- name: Manage textfile collector directory
+  when: node_exporter_textfile_dir | length > 0
+  block:
+    - name: Ensure textfile collector parent directory exists
+      ansible.builtin.file:
+        path: "{{ node_exporter_textfile_dir | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Ensure textfile collector directory exists
+      ansible.builtin.file:
+        path: "{{ node_exporter_textfile_dir }}"
+        state: directory
+        owner: "{{ node_exporter_system_user }}"
+        group: "{{ node_exporter_system_group }}"
+        mode: '0755'
+
+- name: Manage web configuration directory and file
+  when: node_exporter_web_config | length > 0
+  block:
+    - name: Ensure node_exporter configuration directory exists
+      ansible.builtin.file:
+        path: "{{ node_exporter_config_dir }}"
+        state: directory
+        owner: root
+        group: "{{ node_exporter_system_group }}"
+        mode: '0750'
+
+    - name: Render node_exporter web configuration file
+      ansible.builtin.template:
+        src: config.yml.j2
+        dest: "{{ node_exporter_config_dir }}/config.yml"
+        owner: root
+        group: "{{ node_exporter_system_group }}"
+        mode: '0640'
+      notify: "validate and restart node_exporter"
+
+- name: Ensure node_exporter web configuration file is absent when not configured
+  ansible.builtin.file:
+    path: "{{ node_exporter_config_dir }}/config.yml"
+    state: absent
+  when: node_exporter_web_config | length == 0
+  notify: "validate and restart node_exporter"
+
+- name: Render node_exporter systemd service unit
+  ansible.builtin.template:
+    src: node_exporter.service.j2
+    dest: /etc/systemd/system/node_exporter.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: "validate and restart node_exporter"
+
+- name: Flush handlers to apply systemd unit and binary updates before service start
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure node_exporter service is enabled and started
+  ansible.builtin.service:
+    name: "{{ node_exporter_service_name }}"
+    enabled: true
+    state: started

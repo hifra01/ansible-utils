@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: MIT-0
+---
+galaxy_info:
+  author: Hilman F. Rakhmad
+  description: Ansible role to install and configure Prometheus Node Exporter as a systemd service with textfile collector and web security support.
+  company: hifra.dev
+  license: MIT
+  min_ansible_version: "2.21.0"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+
+  galaxy_tags:
+    - prometheus
+    - node_exporter
+    - exporter
+    - monitoring
+    - metrics
+    - system
+
+dependencies: []

@@ -1,0 +1,29 @@
+# Managed by Ansible (hifra01.utils.node_exporter)
+[Unit]
+Description=Prometheus Node Exporter
+Documentation=https://prometheus.io/docs/guides/node-exporter/
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User={{ node_exporter_system_user }}
+Group={{ node_exporter_system_group }}
+ExecStart={{ node_exporter_bin_dir }}/node_exporter \
+  --web.listen-address={{ node_exporter_web_listen_address }} \
+  --web.telemetry-path={{ node_exporter_web_telemetry_path }}{% if node_exporter_textfile_dir | length > 0 and 'textfile' not in node_exporter_disabled_collectors %} \
+  --collector.textfile \
+  --collector.textfile.directory={{ node_exporter_textfile_dir }}{% endif %}{% if node_exporter_web_config | length > 0 %} \
+  --web.config.file={{ node_exporter_config_dir }}/config.yml{% endif %}{% for collector in node_exporter_enabled_collectors %}{% if collector is mapping %}{% for coll_name, coll_opts in collector.items() %} \
+  --collector.{{ coll_name }}{% for opt_k, opt_v in coll_opts.items() %} \
+  --collector.{{ coll_name }}.{{ opt_k }}={{ opt_v | quote }}{% endfor %}{% endfor %}{% else %} \
+  --collector.{{ collector }}{% endif %}{% endfor %}{% for disabled in node_exporter_disabled_collectors %} \
+  --no-collector.{{ disabled }}{% endfor %}{% for flag in node_exporter_extra_flags %} \
+  {{ flag }}{% endfor %}
+
+SyslogIdentifier=node_exporter
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
