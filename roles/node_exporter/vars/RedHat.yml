@@ -4,7 +4,6 @@
 
 node_exporter_prerequisite_packages:
   - ca-certificates
-  - curl
   - tar
 
 node_exporter_service_name: "node_exporter"

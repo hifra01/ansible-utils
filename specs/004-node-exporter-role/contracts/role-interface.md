@@ -90,7 +90,6 @@ node_exporter_nologin_shell: "/usr/sbin/nologin"
 
 node_exporter_prerequisite_packages:
   - ca-certificates
-  - curl
   - tar
 
 node_exporter_service_name: "node_exporter"
