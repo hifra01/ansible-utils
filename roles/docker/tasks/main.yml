@@ -19,3 +19,10 @@
 
 - name: Manage Docker user access
   ansible.builtin.include_tasks: users.yml
+
+- name: Flush handlers before managing Compose projects
+  ansible.builtin.meta: flush_handlers
+
+- name: Manage Docker Compose projects
+  ansible.builtin.include_tasks: compose.yml
+  when: docker_compose_projects | length > 0

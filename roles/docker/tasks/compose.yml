@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: MIT-0
+---
+- name: Validate Docker Compose base configuration
+  ansible.builtin.assert:
+    that:
+      - docker_compose_base_dir is string
+      - docker_compose_base_dir | length > 0
+      - docker_compose_base_dir.startswith('/')
+      - docker_compose_projects is sequence
+    fail_msg: "Invalid docker_compose_base_dir or docker_compose_projects configuration."
+
+- name: Validate individual Docker Compose projects
+  ansible.builtin.assert:
+    that:
+      - item.name is defined
+      - item.name is string
+      - item.name | length > 0
+      - not ('/' in item.name)
+      - not ('..' in item.name)
+      - item.state | default('present') in ['present', 'started', 'stopped', 'absent']
+      - >-
+        item.state | default('present') == 'absent' or
+        ([item.content is defined, item.template is defined, item.src is defined] | select('equalto', true) | list | length == 1)
+      - item.path is not defined or (item.path is string and item.path | length > 0 and item.path.startswith('/'))
+      - item.filename is not defined or (item.filename is string and item.filename | length > 0)
+      - item.owner is not defined or (item.owner is string and item.owner | length > 0)
+      - item.group is not defined or (item.group is string and item.group | length > 0)
+      - item.vars is not defined or (item.vars is mapping)
+      - item.env is not defined or (item.env is mapping or item.env is string)
+      - item.template is not defined or (item.template is string and item.template | length > 0)
+      - item.src is not defined or (item.src is string and item.src | length > 0)
+      - item.pull is not defined or (item.pull is boolean)
+      - item.build is not defined or (item.build is boolean)
+      - item.remove_volumes is not defined or (item.remove_volumes is boolean)
+      - item.remove_dir is not defined or (item.remove_dir is boolean)
+    fail_msg: >-
+      Invalid Docker Compose project definition for '{{ item.name | default('undefined') }}'.
+      Ensure name is non-empty without '/' or '..', state is valid, exactly one of
+      'content', 'template', or 'src' is specified when state is not absent, and all
+      optional fields match expected types and formats.
+  loop: "{{ docker_compose_projects }}"
+  loop_control:
+    label: "{{ item.name | default('unnamed') }}"
+
+- name: Process Docker Compose projects
+  ansible.builtin.include_tasks: compose-project.yml
+  loop: "{{ docker_compose_projects }}"
+  loop_control:
+    loop_var: compose_project
+    label: "{{ compose_project.name }}"

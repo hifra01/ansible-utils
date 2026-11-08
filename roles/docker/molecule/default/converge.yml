@@ -2,6 +2,42 @@
 - name: Converge
   hosts: all
   tasks:
-    - name: "Include hifra01.utils.docker"
+    - name: "Include hifra01.utils.docker with Docker Compose projects"
       ansible.builtin.include_role:
         name: "hifra01.utils.docker"
+      vars:
+        docker_daemon_config:
+          storage-driver: "vfs"
+        docker_compose_projects:
+          # Project 1: Default /srv/webapp/compose.yml with inline content and .env (US1)
+          - name: webapp
+            state: present
+            env:
+              APP_PORT: "8080"
+              APP_MSG: "hello_from_webapp"
+            content: |
+              services:
+                web:
+                  image: busybox:latest
+                  command: ["sh", "-c", "echo ${APP_MSG} on port ${APP_PORT}; sleep 3600"]
+                  restart: unless-stopped
+
+          # Project 2: Custom directory path, custom filename, custom owner/group, custom template with vars (US1 & US2)
+          - name: templated_app
+            path: /srv/custom-stack
+            filename: docker-compose.yml
+            owner: composeuser
+            group: composegroup
+            template: "{{ playbook_dir }}/templates/custom-compose.yml.j2"
+            vars:
+              custom_app_port: 9090
+            state: present
+
+          # Project 3: Stopped stack (US3)
+          - name: stopped_app
+            state: stopped
+            content: |
+              services:
+                worker:
+                  image: busybox:latest
+                  command: ["sh", "-c", "sleep 3600"]
