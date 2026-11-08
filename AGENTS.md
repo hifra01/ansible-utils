@@ -19,6 +19,7 @@ meta/runtime.yml        # requires_ansible
 requirements.txt        # Python dev/test tooling (ansible-core, molecule, linters)
 .ansible-lint           # profile: min, with a warn_list
 .yamllint               # extends default, line-length 160, octal values forbidden
+test-matrix.sh          # Parallel Molecule matrix runner (role x distro)
 .github/workflows/ci.yml# Lint + Molecule matrix (role x distro)
 .specify/               # GitHub Spec-Kit config, constitution, scripts, and templates
 .agents/skills/         # Agent skills for the Spec-Kit workflow (speckit-*)
@@ -119,7 +120,12 @@ pip install -r requirements.txt
 yamllint .
 ansible-lint
 
-# Molecule test a role on ONE distro (requires a running Docker daemon)
+# Molecule test via parallel matrix runner from repo root (recommended)
+./test-matrix.sh -r <role>                      # Test one role across all supported distros in parallel
+./test-matrix.sh -r <role> -o ubuntu2404        # Test one role on a specific distro
+./test-matrix.sh                                # Test all roles across all supported distros
+
+# Or run Molecule directly inside a role directory on ONE distro
 # Default image when MOLECULE_DISTRO is unset: geerlingguy/docker-ubuntu2404-ansible
 cd roles/<role>
 MOLECULE_DISTRO=geerlingguy/docker-rockylinux9-ansible:latest molecule test
@@ -184,32 +190,28 @@ Always run `yamllint .` and `ansible-lint` before finishing a change.
 When asked to test a role with Molecule, **always run `molecule test` against all of these images**
 (the same set as the CI matrix), unless the user explicitly asks for a single distro:
 
-| Distro | Image |
-|---|---|
-| Ubuntu 22.04 | `geerlingguy/docker-ubuntu2204-ansible:latest` |
-| Ubuntu 24.04 | `geerlingguy/docker-ubuntu2404-ansible:latest` |
-| Debian 12 | `geerlingguy/docker-debian12-ansible:latest` |
-| Rocky Linux 9 | `geerlingguy/docker-rockylinux9-ansible:latest` |
-| Rocky Linux 8 | `geerlingguy/docker-rockylinux8-ansible:latest` |
+| Distro | Short key / Aliases | Image |
+|---|---|---|
+| Ubuntu 22.04 | `ubuntu2204` (`u22`) | `geerlingguy/docker-ubuntu2204-ansible:latest` |
+| Ubuntu 24.04 | `ubuntu2404` (`u24`) | `geerlingguy/docker-ubuntu2404-ansible:latest` |
+| Debian 12 | `debian12` (`deb12`) | `geerlingguy/docker-debian12-ansible:latest` |
+| Rocky Linux 9 | `rockylinux9` (`el9`, `rocky9`) | `geerlingguy/docker-rockylinux9-ansible:latest` |
+| Rocky Linux 8 | `rockylinux8` (`el8`, `rocky8`) | `geerlingguy/docker-rockylinux8-ansible:latest` |
 
-- Run them one after another from `roles/<role>/` by setting `MOLECULE_DISTRO` per run.
-  Don't stop at the first failure — run every distro, then report a pass/fail summary per distro.
+- Prefer using `./test-matrix.sh` at the repo root, which isolates container names, Molecule
+  ephemeral directories, and Ansible collection caches per `(role, distro)` worker so tests can
+  run concurrently:
+  ```bash
+  ./test-matrix.sh -r <role>                      # All supported distros for <role> in parallel
+  ./test-matrix.sh -r <role1>,<role2> -o u24,el9  # Filter specific roles and distros
+  ./test-matrix.sh -c --lint                      # Lint + test all git-modified roles
+  ./test-matrix.sh -l                             # Dry-run: list resolved matrix and exclusions
+  ```
+- Don't stop at the first failure — run every distro, then report a pass/fail summary per distro.
 - Skip only distros the role doesn't support, matching the CI `exclude` list
-  (e.g. `apt_mirror` → skip both Rocky images). Say which ones were skipped and why.
-- If the user names a single distro ("test on Rocky 9 only"), run only that image.
-
-```bash
-cd roles/<role>
-for img in \
-  geerlingguy/docker-ubuntu2204-ansible:latest \
-  geerlingguy/docker-ubuntu2404-ansible:latest \
-  geerlingguy/docker-debian12-ansible:latest \
-  geerlingguy/docker-rockylinux9-ansible:latest \
-  geerlingguy/docker-rockylinux8-ansible:latest; do
-  echo "=== $img"
-  MOLECULE_DISTRO="$img" molecule test && echo "PASS $img" || echo "FAIL $img"
-done
-```
+  (e.g. `apt_mirror` → skip both Rocky images). `./test-matrix.sh` handles this automatically.
+- If the user names a single distro ("test on Rocky 9 only"), run only that image
+  (e.g. `./test-matrix.sh -r <role> -o rockylinux9`).
 
 ### Scenario files
 

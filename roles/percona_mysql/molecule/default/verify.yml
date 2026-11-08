@@ -34,7 +34,7 @@
       changed_when: false
 
 - name: Verify MySQL Master Node
-  hosts: mysql-master
+  hosts: mysql_master
   tasks:
     - name: Query master global variables
       ansible.builtin.command:
@@ -77,7 +77,7 @@
       changed_when: true
 
 - name: Verify MySQL Replica Node and Live Replication
-  hosts: mysql-replica
+  hosts: mysql_replica
   tasks:
     - name: Query replica global variables
       ansible.builtin.command:

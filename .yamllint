@@ -19,3 +19,4 @@ rules:
 ignore: |
   .venv/
   .ansible/
+  .molecule-logs/

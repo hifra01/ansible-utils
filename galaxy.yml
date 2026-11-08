@@ -70,6 +70,9 @@ build_ignore:
     - ".venv/**"
     - ".github"
     - ".github/**"
+    - ".molecule-logs"
+    - ".molecule-logs/**"
+    - "test-matrix.sh"
     - "*.tar.gz"
 
 # A dict controlling use of manifest directives used in building the collection artifact. The key 'directives' is a

@@ -4,6 +4,7 @@ profile: min
 exclude_paths:
   - .venv/
   - .ansible/
+  - .molecule-logs/
 
 warn_list:
   - galaxy[no-changelog]

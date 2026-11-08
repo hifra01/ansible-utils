@@ -2,3 +2,4 @@
 /scratchpad
 /.ansible
 /.venv
+/.molecule-logs
