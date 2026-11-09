@@ -1,0 +1,116 @@
+---
+- name: Verify
+  hosts: all
+  tasks:
+    - name: Load OS-specific variables
+      ansible.builtin.include_vars:
+        file: "{{ item }}"
+      with_first_found:
+        - "roles/redis/vars/{{ ansible_facts['os_family'] }}.yml"
+        - "../../vars/{{ ansible_facts['os_family'] }}.yml"
+
+    - name: Wait for Redis port 6379 to become reachable
+      ansible.builtin.wait_for:
+        port: 6379
+        host: 127.0.0.1
+        delay: 1
+        timeout: 30
+
+    - name: Check Redis configuration file status
+      ansible.builtin.stat:
+        path: "{{ redis_config_file }}"
+      register: _config_stat
+
+    - name: Assert Redis configuration file exists and has 0640 permissions
+      ansible.builtin.assert:
+        that:
+          - _config_stat.stat.exists
+          - _config_stat.stat.mode == '0640'
+        fail_msg: "Redis configuration file does not exist or has incorrect permissions."
+
+    - name: Check Redis service status
+      ansible.builtin.service:
+        name: "{{ redis_service_name }}"
+        state: started
+      check_mode: true
+      register: _service_status
+
+    - name: Assert Redis service is active
+      ansible.builtin.assert:
+        that:
+          - not _service_status.changed
+        fail_msg: "Redis service is not running."
+
+    - name: Test unauthenticated ping command
+      ansible.builtin.command: redis-cli ping
+      register: _unauth_ping
+      failed_when: false
+      changed_when: false
+
+    - name: Assert unauthenticated request was rejected with NOAUTH
+      ansible.builtin.assert:
+        that:
+          - "'NOAUTH' in _unauth_ping.stdout or 'NOAUTH' in _unauth_ping.stderr"
+        fail_msg: "Unauthenticated request was unexpectedly allowed or did not return NOAUTH."
+
+    - name: Test authenticated ping command
+      ansible.builtin.command: redis-cli -a MoleculeSecretPassword123! ping
+      register: _auth_ping
+      changed_when: false
+
+    - name: Assert authenticated request succeeded with PONG
+      ansible.builtin.assert:
+        that:
+          - "'PONG' in _auth_ping.stdout"
+        fail_msg: "Authenticated request failed to return PONG."
+
+    - name: Check maxmemory configuration via CONFIG GET
+      ansible.builtin.command: redis-cli -a MoleculeSecretPassword123! CONFIG GET maxmemory
+      register: _maxmemory_config
+      changed_when: false
+
+    - name: Assert maxmemory is configured (256MB = 268435456 bytes)
+      ansible.builtin.assert:
+        that:
+          - "'268435456' in _maxmemory_config.stdout"
+        fail_msg: "maxmemory configuration does not match expected 256MB value."
+
+    - name: Check maxmemory-policy configuration via CONFIG GET
+      ansible.builtin.command: redis-cli -a MoleculeSecretPassword123! CONFIG GET maxmemory-policy
+      register: _policy_config
+      changed_when: false
+
+    - name: Assert maxmemory-policy is allkeys-lru
+      ansible.builtin.assert:
+        that:
+          - "'allkeys-lru' in _policy_config.stdout"
+        fail_msg: "maxmemory-policy configuration does not match allkeys-lru."
+
+    - name: Check appendonly configuration via CONFIG GET
+      ansible.builtin.command: redis-cli -a MoleculeSecretPassword123! CONFIG GET appendonly
+      register: _appendonly_config
+      changed_when: false
+
+    - name: Assert appendonly is enabled
+      ansible.builtin.assert:
+        that:
+          - "'yes' in _appendonly_config.stdout"
+        fail_msg: "appendonly persistence is not enabled."
+
+    - name: Test password removal by converging without password
+      ansible.builtin.include_role:
+        name: "hifra01.utils.redis"
+      vars:
+        redis_bind: "0.0.0.0"
+        redis_password: ""
+
+    - name: Verify unauthenticated ping succeeds when password is empty
+      ansible.builtin.command: redis-cli ping
+      register: _cleared_unauth_ping
+      changed_when: false
+
+    - name: Assert unauthenticated ping succeeds after password removal
+      ansible.builtin.assert:
+        that:
+          - "'PONG' in _cleared_unauth_ping.stdout"
+        fail_msg: "Ping failed without password after resetting redis_password to empty string."

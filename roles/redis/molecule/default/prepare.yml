@@ -1,0 +1,18 @@
+---
+- name: Prepare
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Install Python 3.9 on RHEL/Rocky 8
+      ansible.builtin.raw: |
+        if [ -f /etc/redhat-release ] && grep -q 'release 8' /etc/redhat-release; then
+          command -v python3.9 >/dev/null 2>&1 || dnf install -y python39
+        fi
+      changed_when: false
+
+    - name: Disable EPEL repository on RHEL/Rocky 9 to avoid slow mirror timeouts
+      ansible.builtin.raw: |
+        if [ -f /etc/yum.repos.d/epel.repo ]; then
+          sed -i 's/enabled=1/enabled=0/g' /etc/yum.repos.d/epel*.repo 2>/dev/null || true
+        fi
+      changed_when: false

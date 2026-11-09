@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: MIT-0
+---
+# vars file for redis (RedHat family)
+
+redis_package_name: redis
+redis_service_name: redis
+
+redis_config_dir: >-
+  {{ '/etc' if (ansible_facts['distribution_major_version'] | default(ansible_distribution_major_version | default('8'))) | string == '8'
+     else '/etc/redis' }}
+redis_config_file: >-
+  {{ '/etc/redis.conf' if (ansible_facts['distribution_major_version'] | default(ansible_distribution_major_version | default('8'))) | string == '8'
+     else '/etc/redis/redis.conf' }}
+redis_default_logfile: /var/log/redis/redis.log
+
+redis_system_user: redis
+redis_system_group: redis
+
+redis_config_owner: redis
+redis_config_group: redis
+redis_config_mode: '0640'
+
+redis_repo_rpm_url: https://packages.redis.io/rpm/rhel{{ ansible_distribution_major_version }}
+redis_repo_rpm_key_url: https://packages.redis.io/gpg

@@ -1,0 +1,66 @@
+# {{ ansible_managed }}
+
+# Network
+{% if redis_bind is string %}
+bind {{ redis_bind }}
+{% elif redis_bind is sequence %}
+bind {{ redis_bind | join(' ') }}
+{% endif %}
+protected-mode {{ 'yes' if redis_protected_mode else 'no' }}
+port {{ redis_port }}
+tcp-backlog {{ redis_tcp_backlog }}
+timeout {{ redis_timeout }}
+tcp-keepalive {{ redis_tcp_keepalive }}
+
+# General
+daemonize no
+supervised systemd
+loglevel {{ redis_loglevel }}
+logfile {{ redis_logfile if (redis_logfile | length > 0) else redis_default_logfile }}
+databases {{ redis_databases }}
+
+# Security / Authentication
+{% if redis_password | length > 0 %}
+requirepass {{ redis_password | quote }}
+{% endif %}
+
+# Snapshotting (RDB)
+{% if redis_save | length == 0 %}
+save ""
+{% else %}
+{% for save_rule in redis_save %}
+save {{ save_rule }}
+{% endfor %}
+{% endif %}
+stop-writes-on-bgsave-error yes
+rdbcompression yes
+rdbchecksum yes
+dbfilename dump.rdb
+dir {{ redis_dir }}
+
+# Append Only Mode (AOF)
+appendonly {{ 'yes' if redis_appendonly else 'no' }}
+appendfilename "appendonly.aof"
+appendfsync everysec
+no-appendfsync-on-rewrite no
+auto-aof-rewrite-percentage 100
+auto-aof-rewrite-min-size 64mb
+aof-load-truncated yes
+aof-use-rdb-preamble yes
+
+# Memory Management
+{% if redis_maxmemory | length > 0 %}
+maxmemory {{ redis_maxmemory }}
+maxmemory-policy {{ redis_maxmemory_policy }}
+{% endif %}
+
+# Extra Configuration
+{% if redis_extra_config is mapping %}
+{% for key, val in redis_extra_config.items() %}
+{{ key }} {{ val }}
+{% endfor %}
+{% elif redis_extra_config is sequence and redis_extra_config is not string %}
+{% for line in redis_extra_config %}
+{{ line }}
+{% endfor %}
+{% endif %}

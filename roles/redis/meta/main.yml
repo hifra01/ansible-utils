@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: MIT-0
+---
+galaxy_info:
+  author: Hilman F. Rakhmad
+  description: Ansible role to install and configure Redis Open Source with optional password authentication and persistence support.
+  company: hifra.dev
+  license: MIT
+  min_ansible_version: "2.21.0"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+
+  galaxy_tags:
+    - redis
+    - database
+    - cache
+    - nosql
+    - memory
+
+dependencies: []

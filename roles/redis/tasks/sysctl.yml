@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: MIT-0
+---
+- name: Configure memory overcommit sysctl
+  ansible.posix.sysctl:
+    name: vm.overcommit_memory
+    value: "1"
+    state: present
+    reload: true
+    sysctl_set: true
+  ignore_errors: true
+
+- name: Configure somaxconn socket backlog sysctl
+  ansible.posix.sysctl:
+    name: net.core.somaxconn
+    value: "512"
+    state: present
+    reload: true
+    sysctl_set: true
+  ignore_errors: true

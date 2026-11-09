@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: MIT-0
+---
+- name: Ensure systemd service drop-in directory exists in container environments
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ redis_service_name }}.service.d"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: ansible_facts['virtualization_type'] in ['docker', 'containerd', 'podman', 'container']
+
+- name: Configure systemd drop-in override for container environments
+  ansible.builtin.copy:
+    content: |
+      [Service]
+      SystemCallFilter=
+      MemoryDenyWriteExecute=no
+    dest: "/etc/systemd/system/{{ redis_service_name }}.service.d/override.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  when: ansible_facts['virtualization_type'] in ['docker', 'containerd', 'podman', 'container']
+  notify: "restart redis"
+
+- name: Render Redis configuration file
+  ansible.builtin.template:
+    src: redis.conf.j2
+    dest: "{{ redis_config_file }}"
+    owner: "{{ redis_config_owner }}"
+    group: "{{ redis_config_group }}"
+    mode: "{{ redis_config_mode }}"
+  no_log: "{{ redis_no_log and (redis_password | length > 0) }}"
+  notify: "restart redis"
+
+- name: Flush handlers before ensuring service state
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure Redis service is configured and in desired state
+  ansible.builtin.service:
+    name: "{{ redis_service_name }}"
+    enabled: "{{ redis_service_enabled }}"
+    state: "{{ redis_service_state }}"

@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: MIT-0
+---
+- name: Update apt cache on Debian family
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Configure upstream Redis repository
+  ansible.builtin.include_tasks: "repo-{{ ansible_facts['os_family'] }}.yml"
+  when: redis_install_repo | bool
+
+- name: Install Redis package
+  ansible.builtin.package:
+    name: "{{ redis_package_name }}"
+    state: "{{ redis_package_state }}"
+
+- name: Ensure Redis configuration directory exists
+  ansible.builtin.file:
+    path: "{{ redis_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Ensure Redis data directory exists
+  ansible.builtin.file:
+    path: "{{ redis_dir }}"
+    state: directory
+    owner: "{{ redis_system_user }}"
+    group: "{{ redis_system_group }}"
+    mode: '0750'
+
+- name: Ensure Redis log directory exists
+  ansible.builtin.file:
+    path: /var/log/redis
+    state: directory
+    owner: "{{ redis_system_user }}"
+    group: "{{ redis_system_group }}"
+    mode: '0750'

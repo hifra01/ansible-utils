@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: MIT-0
+---
+- name: Configure Redis RPM repository
+  ansible.builtin.yum_repository:
+    name: redis
+    description: Redis Official Repository
+    baseurl: "{{ redis_repo_rpm_url }}"
+    gpgcheck: true
+    gpgkey: "{{ redis_repo_rpm_key_url }}"
+    enabled: true
