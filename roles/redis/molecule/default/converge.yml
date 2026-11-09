@@ -1,0 +1,13 @@
+---
+- name: Converge
+  hosts: all
+  tasks:
+    - name: "Include hifra01.utils.redis"
+      ansible.builtin.include_role:
+        name: "hifra01.utils.redis"
+      vars:
+        redis_bind: "0.0.0.0"
+        redis_password: "MoleculeSecretPassword123!"
+        redis_maxmemory: "256mb"
+        redis_maxmemory_policy: "allkeys-lru"
+        redis_appendonly: true

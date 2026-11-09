@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: MIT-0
+---
+- name: Ensure apt keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Download Redis repository GPG key
+  ansible.builtin.get_url:
+    url: "{{ redis_repo_apt_key_url }}"
+    dest: "{{ redis_repo_apt_key_path }}"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Configure Redis APT repository
+  ansible.builtin.apt_repository:
+    repo: "{{ redis_repo_apt_url }}"
+    state: present
+    filename: redis

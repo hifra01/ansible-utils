@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: MIT-0
+---
+# vars file for redis (Debian family)
+
+redis_package_name: redis-server
+redis_service_name: redis-server
+
+redis_config_dir: /etc/redis
+redis_config_file: /etc/redis/redis.conf
+redis_default_logfile: /var/log/redis/redis-server.log
+
+redis_system_user: redis
+redis_system_group: redis
+
+redis_config_owner: root
+redis_config_group: redis
+redis_config_mode: '0640'
+
+redis_repo_apt_key_url: https://packages.redis.io/gpg
+redis_repo_apt_key_path: /etc/apt/keyrings/redis.gpg
+redis_repo_apt_url: >-
+  deb [signed-by=/etc/apt/keyrings/redis.gpg] https://packages.redis.io/deb {{ ansible_distribution_release }} main

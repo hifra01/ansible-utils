@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: MIT-0
+---
+# defaults file for redis
+
+# Repository configuration: when true, configures official packages.redis.io repository
+redis_install_repo: false
+
+# Package management
+redis_package_state: present
+
+# Service state management
+redis_service_enabled: true
+redis_service_state: started
+
+# Network binding and security
+redis_bind: "127.0.0.1 -::1"
+redis_port: 6379
+redis_protected_mode: true
+
+# Authentication password (requirepass)
+# When empty (""), authentication is disabled.
+redis_password: ""
+
+# Task output suppression: prevents password exposure in logs and diffs
+redis_no_log: true
+
+# General operational settings
+redis_tcp_backlog: 511
+redis_timeout: 0
+redis_tcp_keepalive: 300
+redis_databases: 16
+redis_loglevel: notice
+
+# Log file path: when empty (""), defaults to OS-appropriate path from vars/<OS>.yml
+redis_logfile: ""
+
+# Working directory for DB persistence files (dump.rdb, appendonly.aof)
+redis_dir: "/var/lib/redis"
+
+# Snapshotting (RDB) rules: list of "seconds changes" strings.
+# Set to an empty list [] to disable RDB persistence.
+redis_save:
+  - "3600 1"
+  - "300 100"
+  - "60 10000"
+
+# Append Only File (AOF) persistence
+redis_appendonly: false
+
+# Memory management
+redis_maxmemory: ""
+redis_maxmemory_policy: "noeviction"
+
+# Raw custom configuration directives (dict or list of strings)
+redis_extra_config: {}
+
+# Host kernel tuning via ansible.posix.sysctl
+# When true, configures vm.overcommit_memory = 1 and net.core.somaxconn = 512
+redis_sysctl: false

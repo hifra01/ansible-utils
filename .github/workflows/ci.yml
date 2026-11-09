@@ -53,6 +53,7 @@ jobs:
       percona_mongodb: ${{ steps.filter.outputs.percona_mongodb }}
       percona_mysql: ${{ steps.filter.outputs.percona_mysql }}
       php: ${{ steps.filter.outputs.php }}
+      redis: ${{ steps.filter.outputs.redis }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -82,6 +83,8 @@ jobs:
               - 'roles/percona_mysql/**'
             php:
               - 'roles/php/**'
+            redis:
+              - 'roles/redis/**'
 
   molecule:
     name: "Molecule: ${{ matrix.role }} (${{ matrix.distro }})"
@@ -102,6 +105,7 @@ jobs:
           - percona_mongodb
           - percona_mysql
           - php
+          - redis
         distro:
           - ubuntu2204
           - ubuntu2404
@@ -145,6 +149,7 @@ jobs:
             percona_mongodb) changed="${{ needs.detect-changes.outputs.percona_mongodb }}" ;;
             percona_mysql) changed="${{ needs.detect-changes.outputs.percona_mysql }}" ;;
             php)         changed="${{ needs.detect-changes.outputs.php }}" ;;
+            redis)       changed="${{ needs.detect-changes.outputs.redis }}" ;;
           esac
           if [[ "$changed" == "true" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
