@@ -4,7 +4,7 @@ dependency:
 driver:
   name: docker
 platforms:
-  - name: "mysql-master${MOLECULE_INSTANCE_SUFFIX:-}"
+  - name: "mysql-master${MOLECULE_INSTANCE_SUFFIX}"
     groups:
       - mysql_master
     image: ${MOLECULE_DISTRO:-geerlingguy/docker-ubuntu2404-ansible}
@@ -15,7 +15,7 @@ platforms:
     cgroupns_mode: host
     privileged: true
     pre_build_image: true
-  - name: "mysql-replica${MOLECULE_INSTANCE_SUFFIX:-}"
+  - name: "mysql-replica${MOLECULE_INSTANCE_SUFFIX}"
     groups:
       - mysql_replica
     image: ${MOLECULE_DISTRO:-geerlingguy/docker-ubuntu2404-ansible}
