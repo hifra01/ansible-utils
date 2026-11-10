@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for installing frankenphp, php-zts, and extensions
+
+- name: Build list of packages to install
+  ansible.builtin.set_fact:
+    _frankenphp_packages_to_install: >-
+      {%- set pkgs = ['frankenphp'] -%}
+      {%- if frankenphp_install_php_cli | bool -%}
+        {%- set _ = pkgs.append('php-zts-cli') -%}
+      {%- endif -%}
+      {%- if frankenphp_install_pie | bool -%}
+        {%- set _ = pkgs.append('pie-zts') -%}
+      {%- endif -%}
+      {%- for ext in frankenphp_php_extensions -%}
+        {%- if ext not in frankenphp_bundled_extensions -%}
+          {%- if ext in frankenphp_extension_map -%}
+            {%- for mapped_ext in frankenphp_extension_map[ext] -%}
+              {%- set pkg = 'php-zts-' ~ mapped_ext -%}
+              {%- if pkg not in pkgs -%}
+                {%- set _ = pkgs.append(pkg) -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- else -%}
+            {%- set pkg = 'php-zts-' ~ ext -%}
+            {%- if pkg not in pkgs -%}
+              {%- set _ = pkgs.append(pkg) -%}
+            {%- endif -%}
+          {%- endif -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ pkgs }}
+
+- name: Install FrankenPHP, PHP-ZTS CLI, and extension packages
+  ansible.builtin.package:
+    name: "{{ _frankenphp_packages_to_install }}"
+    state: "{{ frankenphp_package_state }}"
+  notify: "validate and restart frankenphp"
+
+- name: Ensure /usr/bin/php symlink exists
+  ansible.builtin.file:
+    src: /usr/bin/php-zts
+    dest: /usr/bin/php
+    state: link
+    force: false
+  when:
+    - frankenphp_install_php_cli | bool
+    - frankenphp_manage_php_symlink | bool

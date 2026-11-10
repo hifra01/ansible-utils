@@ -47,6 +47,7 @@ jobs:
       consul: ${{ steps.filter.outputs.consul }}
       datetime: ${{ steps.filter.outputs.datetime }}
       docker: ${{ steps.filter.outputs.docker }}
+      frankenphp: ${{ steps.filter.outputs.frankenphp }}
       linux_users: ${{ steps.filter.outputs.linux_users }}
       nginx: ${{ steps.filter.outputs.nginx }}
       node_exporter: ${{ steps.filter.outputs.node_exporter }}
@@ -71,6 +72,8 @@ jobs:
               - 'roles/datetime/**'
             docker:
               - 'roles/docker/**'
+            frankenphp:
+              - 'roles/frankenphp/**'
             linux_users:
               - 'roles/linux_users/**'
             nginx:
@@ -99,6 +102,7 @@ jobs:
           - consul
           - datetime
           - docker
+          - frankenphp
           - linux_users
           - nginx
           - node_exporter
@@ -143,6 +147,7 @@ jobs:
             consul)      changed="${{ needs.detect-changes.outputs.consul }}" ;;
             datetime)    changed="${{ needs.detect-changes.outputs.datetime }}" ;;
             docker)      changed="${{ needs.detect-changes.outputs.docker }}" ;;
+            frankenphp)  changed="${{ needs.detect-changes.outputs.frankenphp }}" ;;
             linux_users) changed="${{ needs.detect-changes.outputs.linux_users }}" ;;
             nginx)       changed="${{ needs.detect-changes.outputs.nginx }}" ;;
             node_exporter) changed="${{ needs.detect-changes.outputs.node_exporter }}" ;;

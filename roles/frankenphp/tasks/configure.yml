@@ -1,0 +1,120 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for configuring frankenphp
+
+- name: Ensure FrankenPHP configuration directory exists
+  ansible.builtin.file:
+    path: "{{ frankenphp_config_dir }}"
+    state: directory
+    owner: root
+    group: "{{ frankenphp_group }}"
+    mode: '0755'
+
+- name: Ensure Caddyfile drop-in snippet directory exists
+  ansible.builtin.file:
+    path: "{{ frankenphp_config_dir }}/Caddyfile.d"
+    state: directory
+    owner: root
+    group: "{{ frankenphp_group }}"
+    mode: '0755'
+
+- name: Ensure FrankenPHP data directory exists
+  ansible.builtin.file:
+    path: "{{ frankenphp_data_dir }}"
+    state: directory
+    owner: "{{ frankenphp_user }}"
+    group: "{{ frankenphp_group }}"
+    mode: '0750'
+
+- name: Ensure systemd service drop-in override directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/frankenphp.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Configure systemd service drop-in override
+  ansible.builtin.template:
+    src: override.conf.j2
+    dest: /etc/systemd/system/frankenphp.service.d/override.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: "reload systemd and restart frankenphp"
+
+- name: Ensure PHP INI configuration directory exists
+  ansible.builtin.file:
+    path: "{{ frankenphp_php_ini_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Configure custom PHP INI settings
+  ansible.builtin.template:
+    src: 99-frankenphp-custom.ini.j2
+    dest: "{{ frankenphp_php_ini_dir }}/99-frankenphp-custom.ini"
+    owner: root
+    group: root
+    mode: '0644'
+  when: frankenphp_php_ini | length > 0
+  notify: "validate and restart frankenphp"
+
+- name: Remove custom PHP INI settings when empty
+  ansible.builtin.file:
+    path: "{{ frankenphp_php_ini_dir }}/99-frankenphp-custom.ini"
+    state: absent
+  when: frankenphp_php_ini | length == 0
+  notify: "validate and restart frankenphp"
+
+- name: Render modular Caddyfile snippets
+  ansible.builtin.template:
+    src: caddyfile-d.j2
+    dest: "{{ frankenphp_config_dir }}/Caddyfile.d/{{ item.name }}.caddyfile"
+    owner: root
+    group: "{{ frankenphp_group }}"
+    mode: '0644'
+  loop: "{{ frankenphp_caddyfile_d }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: "validate and reload frankenphp"
+
+- name: Find existing modular Caddyfile snippets
+  ansible.builtin.find:
+    paths: "{{ frankenphp_config_dir }}/Caddyfile.d"
+    patterns: "*.caddyfile"
+  register: _frankenphp_existing_snippets
+  when: frankenphp_caddyfile_d_purge | bool
+
+- name: Purge unmanaged modular Caddyfile snippets
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ _frankenphp_existing_snippets.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  vars:
+    _managed_snippets: "{{ frankenphp_caddyfile_d | map(attribute='name') | map('regex_replace', '$', '.caddyfile') | list }}"
+  when:
+    - frankenphp_caddyfile_d_purge | bool
+    - (item.path | basename) not in _managed_snippets
+  notify: "validate and reload frankenphp"
+
+- name: Render primary Caddyfile configuration
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: "{{ frankenphp_caddyfile_path }}"
+    owner: root
+    group: "{{ frankenphp_group }}"
+    mode: '0644'
+  notify: "validate and reload frankenphp"
+
+- name: Flush handlers to apply configuration and restart service
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure frankenphp service is in desired state
+  ansible.builtin.service:
+    name: "{{ frankenphp_service_name }}"
+    state: "{{ frankenphp_service_state }}"
+    enabled: "{{ frankenphp_service_enabled }}"

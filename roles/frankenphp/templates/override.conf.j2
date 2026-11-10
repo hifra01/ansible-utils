@@ -1,0 +1,33 @@
+# {{ ansible_managed }}
+[Service]
+User={{ frankenphp_user }}
+Group={{ frankenphp_group }}
+{% if frankenphp_daemon_mode == 'octane' %}
+Type=simple
+WorkingDirectory={{ frankenphp_octane_app_dir }}
+ExecStartPre=
+{% if frankenphp_octane_use_custom_caddyfile | bool %}
+ExecStartPre=/usr/bin/frankenphp validate --config {{ frankenphp_caddyfile_path }}
+{% endif %}
+ExecStart=
+ExecStart=/usr/bin/php-zts {{ frankenphp_octane_app_dir }}/artisan octane:frankenphp --host={{ frankenphp_octane_host }} --port={{ frankenphp_octane_port }} --admin-port={{ frankenphp_octane_admin_port }} --workers={{ frankenphp_octane_workers }} --max-requests={{ frankenphp_octane_max_requests }}{% if frankenphp_octane_use_custom_caddyfile | bool %} --caddyfile={{ frankenphp_caddyfile_path }}{% endif %}{% for flag in frankenphp_octane_extra_flags %} {{ flag }}{% endfor %}
+ExecReload=
+ExecReload=/usr/bin/php-zts {{ frankenphp_octane_app_dir }}/artisan octane:reload --server=frankenphp
+Environment="XDG_CONFIG_HOME={{ frankenphp_data_dir }}/config"
+Environment="XDG_DATA_HOME={{ frankenphp_data_dir }}/data"
+{% for key, val in frankenphp_env.items() %}
+Environment="{{ key }}={{ val }}"
+{% endfor %}
+{% else %}
+Type=notify
+WorkingDirectory={{ frankenphp_data_dir }}
+ExecStartPre=
+ExecStartPre=/usr/bin/frankenphp validate --config {{ frankenphp_caddyfile_path }}
+ExecStart=
+ExecStart=/usr/bin/frankenphp run --environ --config {{ frankenphp_caddyfile_path }}
+ExecReload=
+ExecReload=/usr/bin/frankenphp reload --config {{ frankenphp_caddyfile_path }} --force
+{% for key, val in frankenphp_env.items() %}
+Environment="{{ key }}={{ val }}"
+{% endfor %}
+{% endif %}

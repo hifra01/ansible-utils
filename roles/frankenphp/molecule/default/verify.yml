@@ -1,0 +1,136 @@
+# SPDX-License-Identifier: MIT-0
+---
+- name: Verify
+  hosts: all
+  tasks:
+    - name: Check frankenphp binary
+      ansible.builtin.stat:
+        path: /usr/bin/frankenphp
+      register: _frankenphp_bin
+
+    - name: Check php-zts binary
+      ansible.builtin.stat:
+        path: /usr/bin/php-zts
+      register: _php_zts_bin
+
+    - name: Check /usr/bin/php symlink
+      ansible.builtin.stat:
+        path: /usr/bin/php
+      register: _php_symlink
+
+    - name: Check override.conf exists
+      ansible.builtin.stat:
+        path: /etc/systemd/system/frankenphp.service.d/override.conf
+      register: _override_conf
+
+    - name: Check healthz drop-in snippet exists
+      ansible.builtin.stat:
+        path: /etc/frankenphp/Caddyfile.d/healthz.caddyfile
+      register: _healthz_snippet
+
+    - name: Check custom php.ini drop-in exists
+      ansible.builtin.stat:
+        path: /etc/php-zts/conf.d/99-frankenphp-custom.ini
+      register: _custom_ini
+
+    - name: Assert files and binaries exist
+      ansible.builtin.assert:
+        that:
+          - _frankenphp_bin.stat.exists
+          - _frankenphp_bin.stat.executable
+          - _php_zts_bin.stat.exists
+          - _php_zts_bin.stat.executable
+          - _php_symlink.stat.exists
+          - _php_symlink.stat.islnk
+          - _php_symlink.stat.lnk_target == '/usr/bin/php-zts'
+          - _override_conf.stat.exists
+          - _healthz_snippet.stat.exists
+          - _custom_ini.stat.exists
+
+    - name: Validate Caddyfile configuration
+      ansible.builtin.command: /usr/bin/frankenphp validate --config /etc/frankenphp/Caddyfile
+      changed_when: false
+
+    - name: Query loaded PHP-ZTS extensions
+      ansible.builtin.command: /usr/bin/php-zts -m
+      register: _php_modules
+      changed_when: false
+
+    - name: Assert required PHP extensions are loaded
+      ansible.builtin.assert:
+        that:
+          - "'bcmath' in _php_modules.stdout"
+          - "'curl' in _php_modules.stdout"
+          - "'gd' in _php_modules.stdout"
+          - "'intl' in _php_modules.stdout"
+          - "'mbstring' in _php_modules.stdout"
+          - "'mysqli' in _php_modules.stdout"
+          - "'mysqlnd' in _php_modules.stdout"
+          - "'PDO' in _php_modules.stdout"
+          - "'redis' in _php_modules.stdout"
+          - "'sqlite3' in _php_modules.stdout"
+          - "'xml' in _php_modules.stdout"
+          - "'zip' in _php_modules.stdout"
+          - "'Zend OPcache' in _php_modules.stdout"
+
+    - name: Query PHP-ZTS phpinfo directives
+      ansible.builtin.command: /usr/bin/php-zts -i
+      register: _php_info
+      changed_when: false
+
+    - name: Assert custom php.ini directives took effect
+      ansible.builtin.assert:
+        that:
+          - "'memory_limit => 256M' in _php_info.stdout"
+          - "'expose_php => Off' in _php_info.stdout"
+
+    - name: Wait for port 8080 to be available
+      ansible.builtin.wait_for:
+        port: 8080
+        host: 127.0.0.1
+        timeout: 30
+
+    - name: Wait for port 8081 to be available
+      ansible.builtin.wait_for:
+        port: 8081
+        host: 127.0.0.1
+        timeout: 30
+
+    - name: Test HTTP response on port 8080 (PHP worker)
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8080
+        method: GET
+        status_code: 200
+        return_content: true
+      register: _http_8080
+      retries: 10
+      delay: 2
+      until: _http_8080.status == 200
+
+    - name: Parse PHP worker response JSON
+      ansible.builtin.set_fact:
+        _worker_data: "{{ _http_8080.json | default(_http_8080.content | from_json) }}"
+
+    - name: Assert PHP worker response contains expected data
+      ansible.builtin.assert:
+        that:
+          - "_worker_data.status == 'ok'"
+          - "_worker_data.app_env == 'production'"
+          - "_worker_data.php_sapi == 'frankenphp'"
+          - "'8.4' in _worker_data.php_version"
+
+    - name: Test HTTP response on port 8081 (healthz drop-in)
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8081/healthz
+        method: GET
+        status_code: 200
+        return_content: true
+      register: _http_8081
+      retries: 10
+      delay: 2
+      until: _http_8081.status == 200
+
+    - name: Assert healthz endpoint returned expected content
+      ansible.builtin.assert:
+        that:
+          - "'OK' in _http_8081.content"

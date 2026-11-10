@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: MIT-0
+---
+- name: Converge
+  hosts: all
+  tasks:
+    - name: Include hifra01.utils.frankenphp
+      ansible.builtin.include_role:
+        name: hifra01.utils.frankenphp
+      vars:
+        frankenphp_php_version: "8.4"
+        frankenphp_php_extensions:
+          - bcmath
+          - curl
+          - gd
+          - intl
+          - mbstring
+          - mysql
+          - opcache
+          - pcntl
+          - pdo
+          - redis
+          - sqlite3
+          - xml
+          - zip
+        frankenphp_php_ini:
+          memory_limit: 256M
+          expose_php: 'Off'
+        frankenphp_env:
+          APP_ENV: production
+        frankenphp_caddyfile: |
+          {
+          	frankenphp
+          }
+
+          :8080 {
+          	root * /var/www/app/public
+          	encode zstd br gzip
+          	php_server {
+          		worker /var/www/app/public/index.php 2
+          	}
+          }
+
+          import /etc/frankenphp/Caddyfile.d/*.caddyfile
+        frankenphp_caddyfile_d:
+          - name: healthz
+            content: |
+              :8081 {
+              	respond /healthz "OK" 200
+              }
