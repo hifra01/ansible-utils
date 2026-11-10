@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: MIT-0
+---
+# vars file for frankenphp (RedHat family)
+
+frankenphp_pre_packages:
+  - ca-certificates
+
+frankenphp_rpm_repo_url: "https://rpm.henderkes.com/static-php-1-1.noarch.rpm"
+frankenphp_dnf_module_stream: "php-zts:static-{{ frankenphp_php_version }}"
+
+frankenphp_service_name: frankenphp
+frankenphp_php_ini_dir: /etc/php-zts/conf.d
+
+frankenphp_bundled_extensions:
+  - calendar
+  - ctype
+  - curl
+  - dom
+  - exif
+  - fileinfo
+  - filter
+  - iconv
+  - libxml
+  - mbregex
+  - mbstring
+  - opcache
+  - openssl
+  - password-argon2
+  - password_argon2
+  - pcntl
+  - phar
+  - posix
+  - readline
+  - session
+  - simplexml
+  - sockets
+  - sodium
+  - tokenizer
+  - xml
+  - xmlreader
+  - xmlwriter
+  - zlib
+
+frankenphp_extension_map:
+  mysql:
+    - mysqlnd
+    - mysqli
+    - pdo_mysql
+  pdo-mysql:
+    - pdo_mysql
+  sqlite3:
+    - sqlite3
+    - pdo_sqlite
+  pdo-sqlite:
+    - pdo_sqlite
+  pgsql:
+    - pgsql
+    - pdo_pgsql
+  pdo-pgsql:
+    - pdo_pgsql
+  odbc:
+    - odbc
+    - pdo_odbc
+  pdo-odbc:
+    - pdo_odbc
+  sqlsrv:
+    - sqlsrv
+    - pdo_sqlsrv
+  pdo-sqlsrv:
+    - pdo_sqlsrv

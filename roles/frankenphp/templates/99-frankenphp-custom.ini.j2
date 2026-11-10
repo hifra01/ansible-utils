@@ -1,0 +1,5 @@
+; {{ ansible_managed }}
+[PHP]
+{% for key, val in frankenphp_php_ini.items() %}
+{{ key }} = {{ val }}
+{% endfor %}

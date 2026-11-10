@@ -72,6 +72,7 @@ and respect `.specify/memory/constitution.md` as the governing project principle
 | `consul` | HashiCorp Consul (server/client mode, advertised services) | Debian, RedHat |
 | `datetime` | Install `tzdata`, set timezone (`datetime_tz`) | Debian, RedHat, Alpine, Archlinux |
 | `docker` | Docker CE/EE repo, install, `daemon.json`, docker group users, Compose stacks (`/srv/<name>`) | Debian, RedHat |
+| `frankenphp` | FrankenPHP application server (Caddy + PHP-ZTS, extensions, Caddyfile, Laravel Octane) | Debian, RedHat |
 | `linux_users` | Users/groups/SSH keys/sudo from a catalog + selection list | Debian, RedHat |
 | `nginx` | Nginx + hardened config, dynamic sites (static/proxy/php), Cloudflare IP filter | Debian, RedHat |
 | `node_exporter` | Prometheus Node Exporter (binary, systemd service, textfile collector, web security) | Debian, RedHat |

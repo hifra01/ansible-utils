@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for frankenphp repository setup on RedHat/Rocky Linux
+
+- name: Install prerequisite packages for repository setup
+  ansible.builtin.package:
+    name: "{{ frankenphp_pre_packages }}"
+    state: present
+
+- name: Install static-php RPM repository
+  ansible.builtin.package:
+    name: "{{ frankenphp_rpm_repo_url }}"
+    state: present
+    disable_gpg_check: true
+
+- name: Check enabled php-zts dnf module stream
+  ansible.builtin.command: dnf module list --enabled php-zts
+  register: _frankenphp_dnf_module_status
+  changed_when: false
+  failed_when: false
+
+- name: Enable php-zts dnf module stream
+  ansible.builtin.command: "dnf module enable -y {{ frankenphp_dnf_module_stream }}"
+  when: ('static-' ~ frankenphp_php_version ~ ' [e]') not in _frankenphp_dnf_module_status.stdout
+  changed_when: true

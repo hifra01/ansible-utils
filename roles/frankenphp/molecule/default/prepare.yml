@@ -1,0 +1,55 @@
+---
+- name: Prepare
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Install Python 3.9 on RHEL/Rocky 8
+      ansible.builtin.raw: |
+        if [ -f /etc/redhat-release ] && grep -q 'release 8' /etc/redhat-release; then
+          command -v python3.9 >/dev/null 2>&1 || dnf install -y python39
+        fi
+      changed_when: false
+
+    - name: Gather facts to detect OS
+      ansible.builtin.setup:
+
+    - name: Use Python 3.9 on RHEL/Rocky 8 targets
+      ansible.builtin.set_fact:
+        ansible_python_interpreter: /usr/bin/python3.9
+      when:
+        - ansible_facts.os_family == 'RedHat'
+        - ansible_facts.distribution_major_version | int == 8
+        - ansible_facts.distribution != 'Fedora'
+
+    - name: Create sample PHP worker app directory fixture
+      ansible.builtin.file:
+        path: /var/www/app/public
+        state: directory
+        mode: '0755'
+
+    - name: Create sample index.php worker app fixture
+      ansible.builtin.copy:
+        dest: /var/www/app/public/index.php
+        mode: '0644'
+        content: |
+          <?php
+          header('Content-Type: application/json');
+          $handler = static function () {
+              echo json_encode([
+                  'status' => 'ok',
+                  'php_version' => PHP_VERSION,
+                  'php_sapi' => php_sapi_name(),
+                  'app_env' => getenv('APP_ENV') ?: 'default',
+                  'extensions' => get_loaded_extensions(),
+                  'memory_limit' => ini_get('memory_limit'),
+              ]);
+          };
+
+          if (function_exists('frankenphp_handle_request')) {
+              for ($nbRequests = 0; $nbRequests < 100; ++$nbRequests) {
+                  $keepRunning = frankenphp_handle_request($handler);
+                  if (!$keepRunning) break;
+              }
+          } else {
+              $handler();
+          }

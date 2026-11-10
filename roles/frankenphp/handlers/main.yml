@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: MIT-0
+---
+# handlers file for frankenphp
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  listen:
+    - "reload systemd and restart frankenphp"
+
+- name: Validate frankenphp config for reload
+  ansible.builtin.command:
+    cmd: "/usr/bin/frankenphp validate --config {{ frankenphp_caddyfile_path }}"
+  changed_when: false
+  when: frankenphp_daemon_mode == 'caddyfile' or (frankenphp_octane_use_custom_caddyfile | bool)
+  listen: "validate and reload frankenphp"
+
+- name: Reload frankenphp
+  ansible.builtin.service:
+    name: "{{ frankenphp_service_name }}"
+    state: reloaded
+  when: frankenphp_service_state == 'started'
+  listen: "validate and reload frankenphp"
+
+- name: Validate frankenphp config for restart
+  ansible.builtin.command:
+    cmd: "/usr/bin/frankenphp validate --config {{ frankenphp_caddyfile_path }}"
+  changed_when: false
+  when: frankenphp_daemon_mode == 'caddyfile' or (frankenphp_octane_use_custom_caddyfile | bool)
+  listen:
+    - "validate and restart frankenphp"
+    - "reload systemd and restart frankenphp"
+
+- name: Restart frankenphp
+  ansible.builtin.service:
+    name: "{{ frankenphp_service_name }}"
+    state: restarted
+  when: frankenphp_service_state == 'started'
+  listen:
+    - "validate and restart frankenphp"
+    - "reload systemd and restart frankenphp"

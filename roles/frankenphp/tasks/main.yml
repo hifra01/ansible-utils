@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for frankenphp
+
+- name: Validate supported platform
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family in ['Debian', 'RedHat']
+    fail_msg: "This role only supports Debian and RedHat family operating systems."
+
+- name: Validate configuration parameters
+  ansible.builtin.assert:
+    that:
+      - frankenphp_php_version | string in ['8.2', '8.3', '8.4', '8.5']
+      - frankenphp_daemon_mode in ['caddyfile', 'octane']
+      - frankenphp_package_state in ['present', 'latest']
+    fail_msg: "Invalid frankenphp configuration parameters."
+
+- name: Include OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+
+- name: Setup repository for current OS family
+  ansible.builtin.include_tasks: "setup-{{ ansible_os_family }}.yml"
+
+- name: Install FrankenPHP, PHP runtime, and extensions
+  ansible.builtin.include_tasks: install.yml
+
+- name: Configure FrankenPHP and daemon
+  ansible.builtin.include_tasks: configure.yml
