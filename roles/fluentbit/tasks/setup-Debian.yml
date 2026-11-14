@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for fluentbit repository setup on Debian/Ubuntu
+
+- name: Install prerequisite packages for repository setup
+  ansible.builtin.apt:
+    name: "{{ fluentbit_pre_packages }}"
+    state: present
+    cache_valid_time: 3600
+
+- name: Ensure apt keyring directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Download Fluent Bit repository signing key
+  ansible.builtin.get_url:
+    url: "{{ fluentbit_gpg_key_url }}"
+    dest: "{{ fluentbit_apt_key_path }}"
+    mode: '0644'
+
+- name: Add Fluent Bit apt repository
+  ansible.builtin.apt_repository:
+    repo: "{{ fluentbit_apt_repo }}"
+    state: present
+    filename: "{{ fluentbit_apt_repo_filename }}"
+    update_cache: true

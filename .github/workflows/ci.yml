@@ -47,6 +47,7 @@ jobs:
       consul: ${{ steps.filter.outputs.consul }}
       datetime: ${{ steps.filter.outputs.datetime }}
       docker: ${{ steps.filter.outputs.docker }}
+      fluentbit: ${{ steps.filter.outputs.fluentbit }}
       frankenphp: ${{ steps.filter.outputs.frankenphp }}
       linux_users: ${{ steps.filter.outputs.linux_users }}
       nginx: ${{ steps.filter.outputs.nginx }}
@@ -72,6 +73,8 @@ jobs:
               - 'roles/datetime/**'
             docker:
               - 'roles/docker/**'
+            fluentbit:
+              - 'roles/fluentbit/**'
             frankenphp:
               - 'roles/frankenphp/**'
             linux_users:
@@ -102,6 +105,7 @@ jobs:
           - consul
           - datetime
           - docker
+          - fluentbit
           - frankenphp
           - linux_users
           - nginx
@@ -147,6 +151,7 @@ jobs:
             consul)      changed="${{ needs.detect-changes.outputs.consul }}" ;;
             datetime)    changed="${{ needs.detect-changes.outputs.datetime }}" ;;
             docker)      changed="${{ needs.detect-changes.outputs.docker }}" ;;
+            fluentbit)   changed="${{ needs.detect-changes.outputs.fluentbit }}" ;;
             frankenphp)  changed="${{ needs.detect-changes.outputs.frankenphp }}" ;;
             linux_users) changed="${{ needs.detect-changes.outputs.linux_users }}" ;;
             nginx)       changed="${{ needs.detect-changes.outputs.nginx }}" ;;

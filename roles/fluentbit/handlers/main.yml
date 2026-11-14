@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: MIT-0
+---
+# handlers file for fluentbit
+
+- name: Validate fluent-bit configuration
+  ansible.builtin.command:
+    cmd: "{{ fluentbit_bin_path }} --dry-run --config {{ fluentbit_config_dir }}/fluent-bit.conf"
+  changed_when: false
+  listen: "validate and restart fluent-bit"
+
+- name: Restart fluent-bit
+  ansible.builtin.service:
+    name: "{{ fluentbit_service_name }}"
+    state: restarted
+  when: fluentbit_service_state == 'started'
+  listen: "validate and restart fluent-bit"

@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: MIT-0
+---
+# vars file for fluentbit (Debian family)
+
+fluentbit_pre_packages:
+  - ca-certificates
+  - curl
+  - gnupg
+
+fluentbit_gpg_key_url: "https://packages.fluentbit.io/fluentbit.key"
+fluentbit_apt_key_path: "/etc/apt/keyrings/fluentbit.asc"
+fluentbit_apt_repo: >-
+  deb [signed-by=/etc/apt/keyrings/fluentbit.asc]
+  https://packages.fluentbit.io/{{ ansible_facts['distribution'] | lower }}/{{ ansible_facts['distribution_release'] }}
+  {{ ansible_facts['distribution_release'] }} main
+fluentbit_apt_repo_filename: "fluent-bit"
+
+fluentbit_package_name: fluent-bit
+fluentbit_service_name: fluent-bit
+fluentbit_bin_path: /opt/fluent-bit/bin/fluent-bit
+
+fluentbit_default_syslog_paths:
+  - /var/log/syslog
+  - /var/log/auth.log

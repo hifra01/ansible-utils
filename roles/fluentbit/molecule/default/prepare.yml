@@ -1,0 +1,131 @@
+---
+- name: Prepare
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Install Python 3.9 on RHEL/Rocky 8
+      ansible.builtin.raw: |
+        if [ -f /etc/redhat-release ] && grep -q 'release 8' /etc/redhat-release; then
+          command -v python3.9 >/dev/null 2>&1 || dnf install -y python39
+        fi
+      changed_when: false
+
+    - name: Gather facts to detect OS
+      ansible.builtin.setup:
+
+    - name: Use Python 3.9 on RHEL/Rocky 8 targets
+      ansible.builtin.set_fact:
+        ansible_python_interpreter: /usr/bin/python3.9
+      when:
+        - ansible_facts.os_family == 'RedHat'
+        - ansible_facts.distribution_major_version | int == 8
+        - ansible_facts.distribution != 'Fedora'
+
+    - name: Check if local deb package is cached on controller
+      ansible.builtin.stat:
+        path: /tmp/fluentbit_cache/fluent-bit_5.2.0_amd64.deb
+      delegate_to: localhost
+      register: _fluentbit_cached_deb
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Pre-populate apt cache from controller if available
+      ansible.builtin.copy:
+        src: /tmp/fluentbit_cache/fluent-bit_5.2.0_amd64.deb
+        dest: /var/cache/apt/archives/fluent-bit_5.2.0_amd64.deb
+        mode: '0644'
+      when:
+        - ansible_facts['os_family'] == 'Debian'
+        - _fluentbit_cached_deb.stat.exists | default(false)
+
+    - name: Create sample log directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /var/www/demo/storage/logs
+        - /var/log/nginx
+
+    - name: Create empty initial log files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: touch
+        mode: '0644'
+        modification_time: preserve
+        access_time: preserve
+      loop:
+        - /var/www/demo/storage/logs/laravel.log
+        - /var/log/nginx/access.log
+        - /var/log/nginx/error.log
+        - /var/log/syslog
+        - /var/log/messages
+
+    - name: Create mock receivers script
+      ansible.builtin.copy:
+        dest: /usr/local/bin/mock_receivers.py
+        mode: '0755'
+        content: |
+          #!/usr/bin/env python3
+          import http.server
+          import socket
+          import socketserver
+          import threading
+
+          class LokiHandler(http.server.BaseHTTPRequestHandler):
+              def do_POST(self):
+                  content_length = int(self.headers.get('Content-Length', 0))
+                  post_data = self.rfile.read(content_length)
+                  with open('/tmp/loki_received.log', 'ab') as f:
+                      f.write(post_data + b'\n')
+                  self.send_response(204)
+                  self.end_headers()
+
+              def do_GET(self):
+                  self.send_response(200)
+                  self.end_headers()
+                  self.wfile.write(b'OK\n')
+
+              def log_message(self, format, *args):
+                  pass
+
+          def run_udp_server():
+              sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+              sock.bind(('127.0.0.1', 12201))
+              while True:
+                  data, _ = sock.recvfrom(65535)
+                  with open('/tmp/graylog_received.log', 'ab') as f:
+                      f.write(data + b'\n')
+
+          def run_http_server():
+              socketserver.TCPServer.allow_reuse_address = True
+              server = socketserver.TCPServer(('127.0.0.1', 3100), LokiHandler)
+              server.serve_forever()
+
+          if __name__ == '__main__':
+              t_udp = threading.Thread(target=run_udp_server, daemon=True)
+              t_udp.start()
+              run_http_server()
+
+    - name: Create mock receivers systemd unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/mock-receivers.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Mock Log Receivers for Loki and Graylog
+          After=network.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/bin/python3 /usr/local/bin/mock_receivers.py
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Start and enable mock receivers service
+      ansible.builtin.systemd_service:
+        name: mock-receivers
+        state: started
+        enabled: true
+        daemon_reload: true

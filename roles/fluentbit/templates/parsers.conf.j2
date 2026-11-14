@@ -1,0 +1,53 @@
+# Template for Fluent Bit parsers
+[MULTILINE_PARSER]
+    name          laravel_multiline
+    type          regex
+    flush_timeout 1000
+    rule          "start_state"   "/^\[\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:?\d{2}|Z)?\] \S+\.[A-Z]+: .*/"  "cont"
+    rule          "cont"          "/^(?!\[\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}).*/"  "cont"
+
+[PARSER]
+    Name        laravel
+    Format      regex
+    Regex       /^\[(?<time>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:?\d{2}|Z)?)\]\s+(?<env>[\w-]+)\.(?<level>[A-Z]+):\s+(?<message>[\s\S]*)$/
+
+[PARSER]
+    Name        nginx_access
+    Format      regex
+    Regex       ^(?<remote>[^ ]*) (?<host>[^ ]*) (?<user>[^ ]*) \[(?<time>[^\]]*)\] "(?<method>\S+)(?: +(?<path>[^\"]*?)(?: +\S*)?)?" (?<code>[^ ]*) (?<size>[^ ]*)(?: "(?<referer>[^\"]*)" "(?<agent>[^\"]*)"(?:\s+"(?<http_x_forwarded_for>[^"]*)")?)?
+    Time_Key    time
+    Time_Format %d/%b/%Y:%H:%M:%S %z
+    Time_Keep   On
+
+[PARSER]
+    Name        nginx_error
+    Format      regex
+    Regex       ^(?<time>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[(?<level>\w+)\] (?<pid>\d+)\#(?<tid>\d+): (?:\*(?<cid>\d+) )?(?<message>.*)$
+    Time_Key    time
+    Time_Format %Y/%m/%d %H:%M:%S
+    Time_Keep   On
+
+[PARSER]
+    Name        syslog-rfc3164
+    Format      regex
+    Regex       ^(?<time>[^ ]*\s*[^ ]* [^ ]*) (?<host>[^ ]*) (?<ident>[a-zA-Z0-9_\/\.\-]*)(?:\[(?<pid>[0-9]+)\])?(?:[^\:]*\:)? *(?<message>.*)$
+    Time_Key    time
+    Time_Format %b %d %H:%M:%S
+    Time_Keep   On
+
+{% for extra_parser in fluentbit_extra_parsers %}
+{% if extra_parser.type | default('') == 'multiline' %}
+[MULTILINE_PARSER]
+{% for k, v in extra_parser.items() %}
+{% if k != 'type' %}
+    {{ k }} {{ v }}
+{% endif %}
+{% endfor %}
+{% else %}
+[PARSER]
+{% for k, v in extra_parser.items() %}
+    {{ k }} {{ v }}
+{% endfor %}
+{% endif %}
+
+{% endfor %}

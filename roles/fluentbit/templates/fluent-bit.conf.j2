@@ -1,0 +1,226 @@
+# Main Fluent Bit configuration
+[SERVICE]
+    Flush         {{ fluentbit_flush_interval }}
+    Daemon        Off
+    Log_Level     {{ fluentbit_log_level }}
+    Parsers_File  {{ fluentbit_config_dir }}/parsers.conf
+    HTTP_Server   {{ 'On' if fluentbit_http_server else 'Off' }}
+{% if fluentbit_http_server %}
+    HTTP_Listen   {{ fluentbit_http_listen }}
+    HTTP_Port     {{ fluentbit_http_port }}
+    Health_Check  On
+{% endif %}
+    storage.path  {{ fluentbit_storage_dir }}
+
+{% if fluentbit_laravel_enabled %}
+[INPUT]
+    Name              tail
+    Tag               {{ fluentbit_laravel_tag }}
+    Path              {{ fluentbit_laravel_log_paths | join(',') }}
+    Multiline.Parser  laravel_multiline
+    DB                {{ fluentbit_storage_dir }}/laravel.db
+    Mem_Buf_Limit     {{ fluentbit_laravel_mem_buf_limit }}
+    Buffer_Max_Size   1M
+    Skip_Long_Lines   On
+    Refresh_Interval  5
+
+[FILTER]
+    Name         parser
+    Match        {{ fluentbit_laravel_tag }}
+    Key_Name     log
+    Parser       laravel
+    Reserve_Data On
+
+[FILTER]
+    Name     modify
+    Match    {{ fluentbit_laravel_tag }}
+    Add      log_source laravel
+    Copy     log message
+    Remove   log
+{% endif %}
+
+{% if fluentbit_nginx_enabled %}
+[INPUT]
+    Name             tail
+    Tag              {{ fluentbit_nginx_access_tag }}
+    Path             {{ fluentbit_nginx_access_log_paths | join(',') }}
+    DB               {{ fluentbit_storage_dir }}/nginx_access.db
+    Mem_Buf_Limit    10MB
+    Buffer_Max_Size  1M
+    Skip_Long_Lines  On
+    Refresh_Interval 5
+
+[FILTER]
+    Name         parser
+    Match        {{ fluentbit_nginx_access_tag }}
+    Key_Name     log
+    Parser       nginx_access
+    Reserve_Data On
+    Preserve_Key On
+
+[FILTER]
+    Name     modify
+    Match    {{ fluentbit_nginx_access_tag }}
+    Add      log_source nginx_access
+    Add      level INFO
+    Rename   log message
+
+[INPUT]
+    Name             tail
+    Tag              {{ fluentbit_nginx_error_tag }}
+    Path             {{ fluentbit_nginx_error_log_paths | join(',') }}
+    DB               {{ fluentbit_storage_dir }}/nginx_error.db
+    Mem_Buf_Limit    10MB
+    Buffer_Max_Size  1M
+    Skip_Long_Lines  On
+    Refresh_Interval 5
+
+[FILTER]
+    Name         parser
+    Match        {{ fluentbit_nginx_error_tag }}
+    Key_Name     log
+    Parser       nginx_error
+    Reserve_Data On
+    Preserve_Key On
+
+[FILTER]
+    Name     modify
+    Match    {{ fluentbit_nginx_error_tag }}
+    Add      log_source nginx_error
+    Copy     log message
+    Remove   log
+{% endif %}
+
+{% if fluentbit_system_log_enabled %}
+{% if fluentbit_system_log_mode in ['systemd', 'both'] %}
+[INPUT]
+    Name              systemd
+    Tag               {{ fluentbit_system_tag }}
+    Read_From_Tail    On
+    Strip_Underscores On
+{% for filter in fluentbit_system_systemd_filters %}
+    Systemd_Filter    {{ filter }}
+{% endfor %}
+
+[FILTER]
+    Name     modify
+    Match    {{ fluentbit_system_tag }}
+    Add      log_source system
+    Copy     MESSAGE message
+    Copy     SYSLOG_IDENTIFIER syslog_identifier
+    Copy     PRIORITY priority
+    Add      level INFO
+{% endif %}
+{% if fluentbit_system_log_mode in ['syslog', 'both'] %}
+[INPUT]
+    Name             tail
+    Tag              {{ fluentbit_system_tag }}
+    Path             {{ (fluentbit_system_log_paths | length > 0) | ternary(fluentbit_system_log_paths, fluentbit_default_syslog_paths) | join(',') }}
+    DB               {{ fluentbit_storage_dir }}/syslog.db
+    Mem_Buf_Limit    10MB
+    Buffer_Max_Size  1M
+    Skip_Long_Lines  On
+    Refresh_Interval 5
+
+[FILTER]
+    Name         parser
+    Match        {{ fluentbit_system_tag }}
+    Key_Name     log
+    Parser       syslog-rfc3164
+    Reserve_Data On
+    Preserve_Key On
+
+[FILTER]
+    Name     modify
+    Match    {{ fluentbit_system_tag }}
+    Add      log_source system
+    Add      level INFO
+    Copy     log message
+    Remove   log
+{% endif %}
+{% endif %}
+
+{% for extra_input in fluentbit_extra_inputs %}
+[INPUT]
+{% for k, v in extra_input.items() %}
+    {{ k }} {{ v }}
+{% endfor %}
+
+{% endfor %}
+[FILTER]
+    Name    record_modifier
+    Match   *
+    Record  hostname ${HOSTNAME}
+
+{% for extra_filter in fluentbit_extra_filters %}
+[FILTER]
+{% for k, v in extra_filter.items() %}
+    {{ k }} {{ v }}
+{% endfor %}
+
+{% endfor %}
+{% if fluentbit_graylog_enabled %}
+[OUTPUT]
+    Name                    gelf
+    Match                   {{ fluentbit_graylog_match }}
+    Host                    {{ fluentbit_graylog_host }}
+    Port                    {{ fluentbit_graylog_port }}
+    Mode                    {{ fluentbit_graylog_mode }}
+    Gelf_Short_Message_Key  message
+    Gelf_Host_Key           hostname
+{% if fluentbit_graylog_mode == 'tls' %}
+    tls                     On
+    tls.verify              {{ 'On' if fluentbit_graylog_tls_verify else 'Off' }}
+{% endif %}
+{% for k, v in fluentbit_graylog_extra_options.items() %}
+    {{ k }} {{ v }}
+{% endfor %}
+
+{% endif %}
+{% if fluentbit_loki_enabled %}
+[OUTPUT]
+    Name          loki
+    Match         {{ fluentbit_loki_match }}
+    Host          {{ fluentbit_loki_host }}
+    Port          {{ fluentbit_loki_port }}
+    uri           {{ fluentbit_loki_uri }}
+    labels        {{ fluentbit_loki_labels | join(',') }}
+    line_format   {{ fluentbit_loki_line_format }}
+    tls           {{ 'On' if fluentbit_loki_tls else 'Off' }}
+    tls.verify    {{ 'On' if fluentbit_loki_tls_verify else 'Off' }}
+{% if fluentbit_loki_tenant_id != '' %}
+    tenant_id     {{ fluentbit_loki_tenant_id }}
+{% endif %}
+{% if fluentbit_loki_http_user != '' %}
+    http_user     {{ fluentbit_loki_http_user }}
+{% endif %}
+{% if fluentbit_loki_http_passwd != '' %}
+    http_passwd   {{ fluentbit_loki_http_passwd }}
+{% endif %}
+{% if fluentbit_loki_bearer_token != '' %}
+    bearer_token  {{ fluentbit_loki_bearer_token }}
+{% endif %}
+{% for k, v in fluentbit_loki_extra_options.items() %}
+    {{ k }} {{ v }}
+{% endfor %}
+
+{% endif %}
+{% if fluentbit_stdout_enabled %}
+[OUTPUT]
+    Name    stdout
+    Match   *
+    Format  json_lines
+
+{% endif %}
+{% for extra_output in fluentbit_extra_outputs %}
+[OUTPUT]
+{% for k, v in extra_output.items() %}
+    {{ k }} {{ v }}
+{% endfor %}
+
+{% endfor %}
+{% if not fluentbit_graylog_enabled and not fluentbit_loki_enabled and not fluentbit_stdout_enabled and (fluentbit_extra_outputs | length == 0) %}
+[OUTPUT]
+    Name    null
+    Match   *
+{% endif %}

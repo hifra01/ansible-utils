@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for fluentbit repository setup on RedHat/Rocky
+
+- name: Install prerequisite packages for repository setup
+  ansible.builtin.package:
+    name: "{{ fluentbit_pre_packages }}"
+    state: present
+
+- name: Configure Fluent Bit YUM repository
+  ansible.builtin.yum_repository:
+    name: fluent-bit
+    description: Fluent Bit Official Repository
+    baseurl: "{{ fluentbit_yum_baseurl }}"
+    gpgcheck: true
+    gpgkey: "{{ fluentbit_gpg_key_url }}"
+    enabled: true
