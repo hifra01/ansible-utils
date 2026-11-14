@@ -8,6 +8,14 @@
 
 **Input**: User description: "create role nginx_exporter separated from nginx role based on the discussion, name branch based on convention"
 
+## Clarifications
+
+### Session 2026-11-14
+
+- Q: Should `nginx_exporter_scrape_uri` accept a single URI string, a list of URI strings, or either format? (FR-006) → A: Either a string or a list of strings (e.g., `"http://127.0.0.1:8080/stub_status"` or `["http://127.0.0.1:8080/stub_status", "http://127.0.0.1:8081/stub_status"]`).
+- Q: How should the `nginx_exporter` Molecule scenario provide a live NGINX `stub_status` endpoint during testing to verify `nginx_up 1`? (SC-001) → A: Converge `hifra01.utils.nginx` (`nginx_stub_status_enabled: true`) alongside `hifra01.utils.nginx_exporter` in `nginx_exporter`'s Molecule scenario, and also verify `stub_status` in `nginx`'s Molecule scenario.
+- Q: Should the `stub_status` location in `/etc/nginx/conf.d/stub_status.conf` disable NGINX access logging (`access_log off;`) by default? (FR-009) → A: Disable access logging by default via a tunable `nginx_stub_status_access_log: "off"` variable (`access_log {{ nginx_stub_status_access_log }};`).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Deploy and Run Prometheus NGINX Exporter on Target Hosts (Priority: P1)
@@ -16,7 +24,7 @@ Infrastructure operators and site reliability engineers need to install Promethe
 
 **Why this priority**: Installing the `nginx-prometheus-exporter` binary, provisioning a dedicated unprivileged service account, and managing the systemd service lifecycle is the foundational capability required to export NGINX metrics.
 
-**Independent Test**: Can be fully tested by enabling a local NGINX `stub_status` endpoint, applying the `nginx_exporter` role to a clean Linux host, and verifying that the `nginx-prometheus-exporter` binary is installed, the `nginx_exporter` systemd service is active and enabled on boot, and an HTTP GET request to `:9113/metrics` returns HTTP 200 with `nginx_up 1` and standard `nginx_connections_*` / `nginx_http_requests_total` metrics.
+**Independent Test**: Can be fully tested by converging `hifra01.utils.nginx` with `nginx_stub_status_enabled: true` alongside `hifra01.utils.nginx_exporter` on a clean Linux host, and verifying that the `nginx-prometheus-exporter` binary is installed, the `nginx_exporter` systemd service is active and enabled on boot, and an HTTP GET request to `:9113/metrics` returns HTTP 200 with `nginx_up 1` and standard `nginx_connections_*` / `nginx_http_requests_total` metrics.
 
 **Acceptance Scenarios**:
 
@@ -36,7 +44,7 @@ Infrastructure operators composing `hifra01.utils.nginx` and `hifra01.utils.ngin
 
 **Acceptance Scenarios**:
 
-1. **Given** a host managed by `hifra01.utils.nginx` with `nginx_stub_status_enabled: true`, **When** the `nginx` role is applied, **Then** `/etc/nginx/conf.d/stub_status.conf` is rendered listening on `{{ nginx_stub_status_host }}:{{ nginx_stub_status_port }}{{ nginx_stub_status_path }}` restricted to `{{ nginx_stub_status_allow }}` IPs, preserved during unused site cleanup, and serves `stub_status` metrics.
+1. **Given** a host managed by `hifra01.utils.nginx` with `nginx_stub_status_enabled: true`, **When** the `nginx` role is applied, **Then** `/etc/nginx/conf.d/stub_status.conf` is rendered listening on `{{ nginx_stub_status_host }}:{{ nginx_stub_status_port }}{{ nginx_stub_status_path }}` restricted to `{{ nginx_stub_status_allow }}` IPs with `access_log {{ nginx_stub_status_access_log }};`, preserved during unused site cleanup, and serves `stub_status` metrics.
 2. **Given** a host managed by `hifra01.utils.nginx` with `nginx_stub_status_enabled: false` (the default), **When** the `nginx` role is applied, **Then** `/etc/nginx/conf.d/stub_status.conf` is ensured absent and NGINX reloads cleanly if it previously existed.
 
 ---
@@ -51,7 +59,7 @@ Platform and security engineers need to customize the exporter's network binding
 
 **Acceptance Scenarios**:
 
-1. **Given** a host configured with custom `nginx_exporter_web_listen_address` (e.g., `127.0.0.1:9113`) and custom `nginx_exporter_scrape_uri`, **When** the role is applied, **Then** `nginx_exporter` binds exclusively to the specified address/port and scrapes the configured URI.
+1. **Given** a host configured with custom `nginx_exporter_web_listen_address` (e.g., `127.0.0.1:9113`) and custom `nginx_exporter_scrape_uri` (provided as either a single URI string or a list of URI strings), **When** the role is applied, **Then** `nginx_exporter` binds exclusively to the specified address/port and scrapes the configured URI(s).
 2. **Given** a non-empty `nginx_exporter_web_config` dictionary (e.g., `tls_server_config` or `basic_auth_users`), **When** the role is applied, **Then** `/etc/nginx_exporter/config.yml` is rendered with `0640` permissions owned by `root:{{ nginx_exporter_system_group }}` and passed via `--web.config.file=/etc/nginx_exporter/config.yml`.
 3. **Given** `nginx_exporter_web_config` is later cleared to `{}`, **When** the role is re-applied, **Then** `/etc/nginx_exporter/config.yml` is removed and `--web.config.file` is omitted from the service command line.
 
@@ -86,7 +94,7 @@ Platform and security engineers need to customize the exporter's network binding
   - `nginx_exporter_system_group` (system group, default `"nginx_exporter"`)
   - `nginx_exporter_web_listen_address` (listen address and port passed to `--web.listen-address`, default `"0.0.0.0:9113"`)
   - `nginx_exporter_web_telemetry_path` (metrics HTTP path passed to `--web.telemetry-path`, default `"/metrics"`)
-  - `nginx_exporter_scrape_uri` (target NGINX `stub_status` or NGINX Plus API URI passed to `--nginx.scrape-uri`, default `"http://127.0.0.1:8080/stub_status"`)
+  - `nginx_exporter_scrape_uri` (target NGINX `stub_status` or NGINX Plus API URI(s) passed to `--nginx.scrape-uri`, accepting either a non-empty string or a non-empty list of strings, default `"http://127.0.0.1:8080/stub_status"`)
   - `nginx_exporter_nginx_plus` (boolean to enable `--nginx.plus` for NGINX Plus API scraping, default `false`)
   - `nginx_exporter_ssl_verify` (boolean to control `--nginx.ssl-verify` when scraping HTTPS endpoints, default `true`)
   - `nginx_exporter_timeout` (scrape timeout duration passed to `--nginx.timeout`, default `"5s"`)
@@ -102,8 +110,9 @@ Platform and security engineers need to customize the exporter's network binding
   - `nginx_stub_status_port` (listen port for stub_status server block, default `8080`)
   - `nginx_stub_status_path` (location path for stub_status, default `"/stub_status"`)
   - `nginx_stub_status_allow` (list of allowed client IPs/CIDRs before `deny all`, default `["127.0.0.1", "::1"]`)
+  - `nginx_stub_status_access_log` (access_log setting inside the stub_status location block, default `"off"`)
   When `nginx_stub_status_enabled: true`, `roles/nginx` MUST render `{{ nginx_config_dir }}/conf.d/stub_status.conf`, exclude `stub_status.conf` from the unused site cleanup task, and validate/reload NGINX; when `false`, `roles/nginx` MUST ensure `{{ nginx_config_dir }}/conf.d/stub_status.conf` is absent.
-- **FR-010**: All tasks across both `roles/nginx_exporter` and `roles/nginx` MUST be strictly idempotent, adhere to collection lint rules (`yamllint .` and `ansible-lint`), register `nginx_exporter` in `.github/workflows/ci.yml` and `AGENTS.md`, and pass Molecule verification across all 5 supported CI matrix distributions.
+- **FR-010**: All tasks across both `roles/nginx_exporter` and `roles/nginx` MUST be strictly idempotent, adhere to collection lint rules (`yamllint .` and `ansible-lint`), register `nginx_exporter` in `.github/workflows/ci.yml` and `AGENTS.md`, and pass Molecule verification across all 5 supported CI matrix distributions (with `roles/nginx_exporter/molecule/default/` converging `hifra01.utils.nginx` with `nginx_stub_status_enabled: true` alongside `hifra01.utils.nginx_exporter`, and `roles/nginx/molecule/default/` also verifying `stub_status` behavior).
 
 ### Key Entities
 

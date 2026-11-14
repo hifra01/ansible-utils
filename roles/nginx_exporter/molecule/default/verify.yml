@@ -1,0 +1,167 @@
+---
+- name: Verify
+  hosts: all
+  tasks:
+    - name: Check nginx-prometheus-exporter binary exists
+      ansible.builtin.stat:
+        path: /usr/local/bin/nginx-prometheus-exporter
+      register: _bin_stat
+
+    - name: Assert nginx-prometheus-exporter binary exists and has proper permissions
+      ansible.builtin.assert:
+        that:
+          - _bin_stat.stat.exists
+          - _bin_stat.stat.mode == '0755'
+        fail_msg: "/usr/local/bin/nginx-prometheus-exporter does not exist or has incorrect permissions."
+
+    - name: Check nginx-prometheus-exporter binary version output
+      ansible.builtin.command: /usr/local/bin/nginx-prometheus-exporter --version
+      register: _bin_version
+      changed_when: false
+
+    - name: Assert nginx-prometheus-exporter binary outputs correct version
+      ansible.builtin.assert:
+        that:
+          - "'nginx_exporter' in (_bin_version.stdout ~ _bin_version.stderr)"
+          - "'1.4.1' in (_bin_version.stdout ~ _bin_version.stderr)"
+        fail_msg: "nginx-prometheus-exporter version output does not match expected version 1.4.1."
+
+    - name: Check nginx_exporter system user and group
+      ansible.builtin.getent:
+        database: passwd
+        key: nginx_exporter
+
+    - name: Assert nginx_exporter user shell is nologin
+      ansible.builtin.assert:
+        that:
+          - "'nologin' in ansible_facts.getent_passwd['nginx_exporter'][5]"
+        fail_msg: "nginx_exporter user shell is not set to nologin."
+
+    - name: Check nginx_exporter service status
+      ansible.builtin.service:
+        name: nginx_exporter
+        state: started
+      check_mode: true
+      register: _service_status
+
+    - name: Assert nginx_exporter service is running
+      ansible.builtin.assert:
+        that:
+          - not _service_status.changed
+        fail_msg: "nginx_exporter service is not active."
+
+    - name: Check web configuration file
+      ansible.builtin.stat:
+        path: /etc/nginx_exporter/config.yml
+      register: _config_stat
+
+    - name: Assert web configuration file exists with 0640 permissions
+      ansible.builtin.assert:
+        that:
+          - _config_stat.stat.exists
+          - _config_stat.stat.mode == '0640'
+        fail_msg: "/etc/nginx_exporter/config.yml does not exist or has incorrect mode."
+
+    - name: Verify unauthenticated HTTP request is rejected (401 Unauthorized)
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9113/metrics
+        status_code: 401
+      register: _unauth_metrics
+
+    - name: Verify authenticated HTTP request succeeds (200 OK)
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9113/metrics
+        url_username: prometheus
+        url_password: secretpassword
+        force_basic_auth: true
+        return_content: true
+        status_code: 200
+      register: _auth_metrics
+      retries: 5
+      delay: 2
+      until: _auth_metrics.status == 200
+
+    - name: Assert metrics output contains NGINX metrics and nginx_up is 1
+      ansible.builtin.assert:
+        that:
+          - "'nginx_up 1' in _auth_metrics.content"
+          - "'nginx_connections_active' in _auth_metrics.content"
+          - "'nginx_connections_accepted' in _auth_metrics.content"
+          - "'nginx_http_requests_total' in _auth_metrics.content"
+        fail_msg: "/metrics does not contain expected NGINX metrics or nginx_up is not 1."
+
+    - name: Check systemd service unit contents
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/nginx_exporter.service
+      register: _service_unit
+
+    - name: Assert flags are rendered in systemd unit
+      ansible.builtin.assert:
+        that:
+          - "'--web.listen-address=0.0.0.0:9113' in (_service_unit.content | b64decode)"
+          - "'--web.telemetry-path=/metrics' in (_service_unit.content | b64decode)"
+          - "'--nginx.scrape-uri=http://127.0.0.1:8080/stub_status' in (_service_unit.content | b64decode)"
+          - "'--web.config.file=/etc/nginx_exporter/config.yml' in (_service_unit.content | b64decode)"
+          - "'--log.level=info' in (_service_unit.content | b64decode)"
+        fail_msg: "Systemd unit does not contain expected flags."
+
+    - name: Test web_config cleanup by converging without web_config
+      ansible.builtin.include_role:
+        name: "hifra01.utils.nginx_exporter"
+      vars:
+        nginx_exporter_web_config: {}
+
+    - name: Check if web configuration file was removed
+      ansible.builtin.stat:
+        path: /etc/nginx_exporter/config.yml
+      register: _cleaned_config_stat
+
+    - name: Assert web configuration file was purged
+      ansible.builtin.assert:
+        that:
+          - not _cleaned_config_stat.stat.exists
+        fail_msg: "/etc/nginx_exporter/config.yml was not removed when web_config was empty."
+
+    - name: Verify HTTP request succeeds without authentication now
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9113/metrics
+        return_content: true
+        status_code: 200
+      register: _cleaned_metrics
+      retries: 5
+      delay: 2
+      until: _cleaned_metrics.status == 200
+
+    - name: Test list format for nginx_exporter_scrape_uri
+      ansible.builtin.include_role:
+        name: "hifra01.utils.nginx_exporter"
+      vars:
+        nginx_exporter_scrape_uri:
+          - "http://127.0.0.1:8080/stub_status"
+
+    - name: Check systemd service unit contents after list scrape_uri
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/nginx_exporter.service
+      register: _service_unit_list
+
+    - name: Assert list scrape-uri is rendered in systemd unit
+      ansible.builtin.assert:
+        that:
+          - "'--nginx.scrape-uri=http://127.0.0.1:8080/stub_status' in (_service_unit_list.content | b64decode)"
+        fail_msg: "Systemd unit does not contain list-rendered scrape-uri flag."
+
+    - name: Verify HTTP request succeeds with list scrape_uri
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9113/metrics
+        return_content: true
+        status_code: 200
+      register: _list_metrics
+      retries: 5
+      delay: 2
+      until: _list_metrics.status == 200
+
+    - name: Assert nginx_up is still 1 with list scrape_uri
+      ansible.builtin.assert:
+        that:
+          - "'nginx_up 1' in _list_metrics.content"
+        fail_msg: "nginx_up is not 1 when configured with list scrape_uri."

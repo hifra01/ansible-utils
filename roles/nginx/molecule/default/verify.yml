@@ -115,6 +115,33 @@
           - "'inline custom ok' in _res_8081.content"
           - "'templated vhost: custom_ok' in _res_8082.content"
 
+    - name: Read stub_status.conf content
+      ansible.builtin.slurp:
+        src: /etc/nginx/conf.d/stub_status.conf
+      register: _stub_status_conf_b64
+
+    - name: Assert stub_status configuration content
+      ansible.builtin.assert:
+        that:
+          - "'listen 127.0.0.1:8085;' in (_stub_status_conf_b64.content | b64decode)"
+          - "'location /stub_status {' in (_stub_status_conf_b64.content | b64decode)"
+          - "'stub_status;' in (_stub_status_conf_b64.content | b64decode)"
+          - "'access_log off;' in (_stub_status_conf_b64.content | b64decode)"
+          - "'allow 127.0.0.1;' in (_stub_status_conf_b64.content | b64decode)"
+          - "'deny all;' in (_stub_status_conf_b64.content | b64decode)"
+
+    - name: Verify HTTP response on port 8085 (stub_status)
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8085/stub_status
+        status_code: 200
+        return_content: true
+      register: _res_8085
+
+    - name: Assert stub_status HTTP response body
+      ansible.builtin.assert:
+        that:
+          - "'Active connections:' in _res_8085.content"
+
     - name: Test standalone trusted_proxies mode (Cloudflare disabled)
       ansible.builtin.include_role:
         name: "hifra01.utils.nginx"
@@ -134,21 +161,22 @@
         nginx_enabled_sites:
           - default
 
-    - name: Verify cloudflare files are absent
+    - name: Verify cloudflare and disabled stub_status files are absent
       ansible.builtin.stat:
         path: "{{ item }}"
-      register: _cf_stats
+      register: _absent_file_stats
       loop:
         - /etc/nginx/conf.d/cloudflare.conf
         - /etc/nginx/allow-cloudflare-only.conf
+        - /etc/nginx/conf.d/stub_status.conf
       loop_control:
         loop_var: item
 
-    - name: Assert cloudflare files absent
+    - name: Assert disabled files are absent
       ansible.builtin.assert:
         that:
           - not item.stat.exists
-      loop: "{{ _cf_stats.results }}"
+      loop: "{{ _absent_file_stats.results }}"
       loop_control:
         loop_var: item
 

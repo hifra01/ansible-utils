@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for nginx_exporter
+
+- name: Validate supported platform
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] in ['Debian', 'RedHat']
+    fail_msg: "This role only supports Debian and RedHat family systems."
+
+- name: Validate supported architecture
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['architecture'] in ['x86_64', 'aarch64', 'armv7l']
+    fail_msg: "Unsupported architecture: {{ ansible_facts['architecture'] }}. Supported: x86_64, aarch64, armv7l."
+
+- name: Validate role inputs
+  ansible.builtin.assert:
+    that:
+      - nginx_exporter_version is string
+      - nginx_exporter_version | length > 0
+      - (nginx_exporter_checksum | length == 0) or (nginx_exporter_checksum is match('^[a-fA-F0-9]{64}$'))
+      - nginx_exporter_bin_dir is match('^/')
+      - nginx_exporter_config_dir is match('^/')
+      - nginx_exporter_system_user | string | length > 0
+      - nginx_exporter_system_group | string | length > 0
+      - nginx_exporter_web_listen_address | string | length > 0
+      - nginx_exporter_web_telemetry_path is match('^/')
+      - >-
+        (nginx_exporter_scrape_uri is string and nginx_exporter_scrape_uri | length > 0) or
+        (nginx_exporter_scrape_uri is sequence and nginx_exporter_scrape_uri | length > 0)
+      - nginx_exporter_nginx_plus is boolean
+      - nginx_exporter_ssl_verify is boolean
+      - nginx_exporter_timeout | string | length > 0
+      - nginx_exporter_extra_flags is sequence
+      - nginx_exporter_web_config is mapping
+      - nginx_exporter_service_enabled is boolean
+      - nginx_exporter_service_state in ['started', 'stopped']
+    fail_msg: >-
+      Invalid nginx_exporter_* role variables: check version, checksum (64 hex characters if set),
+      absolute paths for bin_dir/config_dir, telemetry path starting with '/',
+      non-empty system_user/group/web_listen_address, valid scrape_uri, booleans for nginx_plus/ssl_verify/service_enabled,
+      and dictionary for web_config.
+
+- name: Load OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_facts['os_family'] }}.yml"
+
+- name: Install nginx_exporter binary and system account
+  ansible.builtin.include_tasks: install.yml
+
+- name: Configure nginx_exporter service and web security
+  ansible.builtin.include_tasks: configure.yml

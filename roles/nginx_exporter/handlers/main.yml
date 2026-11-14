@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: MIT-0
+---
+# handlers file for nginx_exporter
+
+- name: Reload systemd daemon for nginx_exporter
+  ansible.builtin.systemd:
+    daemon_reload: true
+  listen: "validate and restart nginx_exporter"
+
+- name: Validate nginx_exporter binary before restart
+  ansible.builtin.command: "{{ nginx_exporter_bin_dir }}/nginx-prometheus-exporter --version"
+  changed_when: false
+  listen: "validate and restart nginx_exporter"
+
+- name: Restart nginx_exporter
+  ansible.builtin.service:
+    name: "{{ nginx_exporter_service_name }}"
+    state: restarted
+  listen: "validate and restart nginx_exporter"

@@ -75,6 +75,7 @@ and respect `.specify/memory/constitution.md` as the governing project principle
 | `frankenphp` | FrankenPHP application server (Caddy + PHP-ZTS, extensions, Caddyfile, Laravel Octane) | Debian, RedHat |
 | `linux_users` | Users/groups/SSH keys/sudo from a catalog + selection list | Debian, RedHat |
 | `nginx` | Nginx + hardened config, dynamic sites (static/proxy/php), Cloudflare IP filter | Debian, RedHat |
+| `nginx_exporter` | Prometheus NGINX Exporter (binary, systemd service, stub_status/NGINX Plus, web security) | Debian, RedHat |
 | `node_exporter` | Prometheus Node Exporter (binary, systemd service, textfile collector, web security) | Debian, RedHat |
 | `percona_mongodb` | Percona Server for MongoDB 8.0, replica set (single/multi-node), keyfile auth, users | Debian, RedHat |
 | `percona_mysql` | Percona Server for MySQL (master/replica, GTID replication, users/dbs) | Debian, RedHat |

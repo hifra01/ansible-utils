@@ -19,6 +19,17 @@
       - nginx_trusted_proxies is sequence
       - nginx_sites is sequence
       - nginx_enabled_sites is sequence
+      - nginx_stub_status_enabled is boolean
+      - nginx_stub_status_host is string
+      - nginx_stub_status_host | length > 0
+      - nginx_stub_status_port is integer
+      - nginx_stub_status_port >= 1
+      - nginx_stub_status_port <= 65535
+      - nginx_stub_status_path is string
+      - nginx_stub_status_path is match('^/')
+      - nginx_stub_status_allow is sequence
+      - nginx_stub_status_access_log is string
+      - nginx_stub_status_access_log | length > 0
     fail_msg: "Invalid global Nginx configuration parameters provided."
     quiet: true
 
@@ -164,6 +175,21 @@
       when: nginx_trusted_proxies | length == 0
       notify: "validate and reload nginx"
 
+- name: Configure stub_status endpoint
+  ansible.builtin.template:
+    src: stub_status.conf.j2
+    dest: "{{ nginx_config_dir }}/conf.d/stub_status.conf"
+    mode: '0644'
+  when: nginx_stub_status_enabled | bool
+  notify: "validate and reload nginx"
+
+- name: Remove stub_status endpoint when disabled
+  ansible.builtin.file:
+    path: "{{ nginx_config_dir }}/conf.d/stub_status.conf"
+    state: absent
+  when: not (nginx_stub_status_enabled | bool)
+  notify: "validate and reload nginx"
+
 - name: Configure main nginx.conf
   ansible.builtin.template:
     src: nginx.conf.j2
@@ -214,7 +240,7 @@
     label: "{{ item.path | basename }}"
   when:
     - (item.path | basename | regex_replace('\\.conf$', '')) not in nginx_enabled_sites
-    - (item.path | basename) not in ['cloudflare.conf', 'trusted_proxies.conf']
+    - (item.path | basename) not in ['cloudflare.conf', 'trusted_proxies.conf', 'stub_status.conf']
   notify: "validate and reload nginx"
 
 - name: Ensure Nginx service is running and enabled

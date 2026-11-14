@@ -1,0 +1,13 @@
+server {
+    listen {{ nginx_stub_status_host }}:{{ nginx_stub_status_port }};
+    server_name localhost;
+
+    location {{ nginx_stub_status_path }} {
+        stub_status;
+        access_log {{ nginx_stub_status_access_log }};
+{% for ip in nginx_stub_status_allow %}
+        allow {{ ip }};
+{% endfor %}
+        deny all;
+    }
+}

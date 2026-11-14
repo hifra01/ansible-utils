@@ -1,0 +1,100 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for nginx_exporter (install)
+
+- name: Update apt cache on Debian family
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Install prerequisite packages
+  ansible.builtin.package:
+    name: "{{ nginx_exporter_prerequisite_packages }}"
+    state: present
+
+- name: Create nginx_exporter system group
+  ansible.builtin.group:
+    name: "{{ nginx_exporter_system_group }}"
+    system: true
+    state: present
+
+- name: Create nginx_exporter system user
+  ansible.builtin.user:
+    name: "{{ nginx_exporter_system_user }}"
+    group: "{{ nginx_exporter_system_group }}"
+    system: true
+    shell: "{{ nginx_exporter_nologin_shell }}"
+    create_home: false
+    home: /
+    state: present
+
+- name: Check if nginx_exporter binary already exists
+  ansible.builtin.stat:
+    path: "{{ nginx_exporter_bin_dir }}/nginx-prometheus-exporter"
+  register: _nginx_exporter_bin_stat
+
+- name: Check installed nginx_exporter version
+  ansible.builtin.command: "{{ nginx_exporter_bin_dir }}/nginx-prometheus-exporter --version"
+  register: _nginx_exporter_installed_version
+  changed_when: false
+  failed_when: false
+  when: _nginx_exporter_bin_stat.stat.exists
+
+- name: Determine if nginx_exporter download is needed
+  ansible.builtin.set_fact:
+    _nginx_exporter_download_needed: >-
+      {{
+        not _nginx_exporter_bin_stat.stat.exists or
+        (
+          nginx_exporter_version not in (_nginx_exporter_installed_version.stdout | default('')) and
+          nginx_exporter_version not in (_nginx_exporter_installed_version.stderr | default(''))
+        )
+      }}
+
+- name: Download and install nginx_exporter binary
+  when: _nginx_exporter_download_needed | bool
+  block:
+    - name: Create temporary directory for download
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: nginx_exporter_
+      register: _nginx_exporter_tempdir
+
+    - name: Download nginx_exporter release archive
+      ansible.builtin.get_url:
+        url: "{{ nginx_exporter_download_url }}"
+        dest: >-
+          {{ _nginx_exporter_tempdir.path }}/nginx-prometheus-exporter_{{
+          nginx_exporter_version }}_linux_{{
+          nginx_exporter_arch_map[ansible_facts['architecture'] | default(ansible_architecture)] |
+          default(ansible_facts['architecture'] | default(ansible_architecture)) }}.tar.gz
+        checksum: "sha256:{{ nginx_exporter_checksum if (nginx_exporter_checksum | length > 0) else nginx_exporter_checksums_url }}"
+        mode: '0644'
+
+    - name: Extract nginx_exporter release archive
+      ansible.builtin.unarchive:
+        src: >-
+          {{ _nginx_exporter_tempdir.path }}/nginx-prometheus-exporter_{{
+          nginx_exporter_version }}_linux_{{
+          nginx_exporter_arch_map[ansible_facts['architecture'] | default(ansible_architecture)] |
+          default(ansible_facts['architecture'] | default(ansible_architecture)) }}.tar.gz
+        dest: "{{ _nginx_exporter_tempdir.path }}"
+        remote_src: true
+
+    - name: Install nginx_exporter binary to system bin dir
+      ansible.builtin.copy:
+        src: "{{ _nginx_exporter_tempdir.path }}/nginx-prometheus-exporter"
+        dest: "{{ nginx_exporter_bin_dir }}/nginx-prometheus-exporter"
+        owner: root
+        group: root
+        mode: '0755'
+        remote_src: true
+      notify: "validate and restart nginx_exporter"
+
+  always:
+    - name: Clean up temporary download directory
+      ansible.builtin.file:
+        path: "{{ _nginx_exporter_tempdir.path }}"
+        state: absent
+      when: _nginx_exporter_tempdir.path is defined

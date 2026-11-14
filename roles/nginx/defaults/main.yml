@@ -71,3 +71,13 @@ nginx_sites:
 # List of site names that should be enabled on the host
 nginx_enabled_sites:
   - default
+
+# NGINX stub_status configuration (for Prometheus nginx_exporter scraping)
+nginx_stub_status_enabled: false
+nginx_stub_status_host: "127.0.0.1"
+nginx_stub_status_port: 8080
+nginx_stub_status_path: "/stub_status"
+nginx_stub_status_allow:
+  - "127.0.0.1"
+  - "::1"
+nginx_stub_status_access_log: "off"

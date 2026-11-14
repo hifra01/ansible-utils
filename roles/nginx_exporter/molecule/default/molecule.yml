@@ -1,0 +1,26 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: docker
+platforms:
+  - name: ${MOLECULE_INSTANCE_NAME:-instance}
+    image: ${MOLECULE_DISTRO:-geerlingguy/docker-ubuntu2404-ansible}
+    platform: linux/amd64
+    command: ${MOLECULE_COMMAND:-""}
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    cgroupns_mode: host
+    privileged: true
+    pre_build_image: true
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      become_method: su
+  inventory:
+    host_vars:
+      localhost:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+verifier:
+  name: ansible
