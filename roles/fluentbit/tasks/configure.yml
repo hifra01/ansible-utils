@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for fluentbit configuration and service management
+
+- name: Ensure Fluent Bit configuration directory exists
+  ansible.builtin.file:
+    path: "{{ fluentbit_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Ensure Fluent Bit storage directory exists
+  ansible.builtin.file:
+    path: "{{ fluentbit_storage_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Render Fluent Bit parsers configuration
+  ansible.builtin.template:
+    src: parsers.conf.j2
+    dest: "{{ fluentbit_config_dir }}/parsers.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: "validate and restart fluent-bit"
+
+- name: Render Fluent Bit main configuration
+  ansible.builtin.template:
+    src: fluent-bit.conf.j2
+    dest: "{{ fluentbit_config_dir }}/fluent-bit.conf"
+    owner: root
+    group: root
+    mode: '0640'
+  notify: "validate and restart fluent-bit"
+
+- name: Validate rendered Fluent Bit configuration
+  ansible.builtin.command:
+    cmd: "{{ fluentbit_bin_path }} --dry-run --config {{ fluentbit_config_dir }}/fluent-bit.conf"
+  changed_when: false
+
+- name: Flush handlers to apply configuration changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure Fluent Bit service is configured
+  ansible.builtin.service:
+    name: "{{ fluentbit_service_name }}"
+    state: "{{ fluentbit_service_state }}"
+    enabled: "{{ fluentbit_service_enabled }}"

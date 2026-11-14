@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for fluentbit
+
+- name: Validate supported platform
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] in ['Debian', 'RedHat']
+    fail_msg: "This role only supports Debian and RedHat family operating systems."
+
+- name: Validate configuration parameters
+  ansible.builtin.assert:
+    that:
+      - fluentbit_package_state in ['present', 'latest']
+      - fluentbit_service_state in ['started', 'stopped']
+      - fluentbit_log_level in ['off', 'error', 'warning', 'info', 'debug', 'trace']
+      - fluentbit_flush_interval | int > 0
+      - fluentbit_system_log_mode in ['systemd', 'syslog', 'both']
+      - fluentbit_graylog_mode in ['udp', 'tcp', 'tls']
+      - fluentbit_loki_line_format in ['json', 'key_value']
+      - not (fluentbit_http_server | bool) or (fluentbit_http_port | int >= 1 and fluentbit_http_port | int <= 65535)
+      - >-
+        not (fluentbit_graylog_enabled | bool) or
+        (fluentbit_graylog_host | string != '' and
+         fluentbit_graylog_port | int >= 1 and
+         fluentbit_graylog_port | int <= 65535)
+      - >-
+        not (fluentbit_loki_enabled | bool) or
+        (fluentbit_loki_host | string != '' and
+         fluentbit_loki_port | int >= 1 and
+         fluentbit_loki_port | int <= 65535)
+      - not (fluentbit_laravel_enabled | bool) or (fluentbit_laravel_log_paths | length > 0)
+      - >-
+        not (fluentbit_nginx_enabled | bool) or
+        (fluentbit_nginx_access_log_paths | length > 0 and
+         fluentbit_nginx_error_log_paths | length > 0)
+    fail_msg: "Invalid fluentbit configuration parameters."
+
+- name: Include OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_facts['os_family'] }}.yml"
+
+- name: Setup repository for current OS family
+  ansible.builtin.include_tasks: "setup-{{ ansible_facts['os_family'] }}.yml"
+
+- name: Install Fluent Bit package
+  ansible.builtin.include_tasks: install.yml
+
+- name: Configure Fluent Bit and service
+  ansible.builtin.include_tasks: configure.yml

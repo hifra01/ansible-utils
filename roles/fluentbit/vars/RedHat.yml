@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: MIT-0
+---
+# vars file for fluentbit (RedHat family)
+
+fluentbit_pre_packages:
+  - ca-certificates
+
+fluentbit_gpg_key_url: "https://packages.fluentbit.io/fluentbit.key"
+fluentbit_yum_baseurl: "https://packages.fluentbit.io/centos/$releasever/"
+
+fluentbit_package_name: fluent-bit
+fluentbit_service_name: fluent-bit
+fluentbit_bin_path: /opt/fluent-bit/bin/fluent-bit
+
+fluentbit_default_syslog_paths:
+  - /var/log/messages
+  - /var/log/secure

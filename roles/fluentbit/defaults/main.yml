@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: MIT-0
+---
+# defaults file for fluentbit
+
+# Package and service state
+fluentbit_package_state: present
+fluentbit_service_enabled: true
+fluentbit_service_state: started
+
+# Configuration and persistent state directories
+fluentbit_config_dir: "/etc/fluent-bit"
+fluentbit_storage_dir: "/var/lib/fluent-bit"
+
+# Global [SERVICE] settings
+fluentbit_flush_interval: 1
+fluentbit_log_level: "info"
+fluentbit_http_server: false
+fluentbit_http_listen: "127.0.0.1"
+fluentbit_http_port: 2020
+
+# Laravel multiline log input & parser configuration
+fluentbit_laravel_enabled: true
+fluentbit_laravel_log_paths:
+  - "/var/www/*/storage/logs/*.log"
+  - "/var/log/laravel/*.log"
+fluentbit_laravel_tag: "laravel.app"
+fluentbit_laravel_mem_buf_limit: "10MB"
+
+# Nginx access and error log input & parser configuration
+fluentbit_nginx_enabled: true
+fluentbit_nginx_access_log_paths:
+  - "/var/log/nginx/*access*.log"
+fluentbit_nginx_error_log_paths:
+  - "/var/log/nginx/*error*.log"
+fluentbit_nginx_access_tag: "nginx.access"
+fluentbit_nginx_error_tag: "nginx.error"
+
+# System log input configuration ("systemd", "syslog", or "both")
+fluentbit_system_log_enabled: true
+fluentbit_system_log_mode: "systemd"
+fluentbit_system_log_paths: []
+fluentbit_system_systemd_filters: []
+fluentbit_system_tag: "system.syslog"
+
+# Extensibility lists for custom parsers, inputs, and filters
+fluentbit_extra_parsers: []
+fluentbit_extra_inputs: []
+fluentbit_extra_filters: []
+
+# Graylog (GELF) output configuration
+fluentbit_graylog_enabled: false
+fluentbit_graylog_host: "127.0.0.1"
+fluentbit_graylog_port: 12201
+fluentbit_graylog_mode: "udp"
+fluentbit_graylog_match: "*"
+fluentbit_graylog_tls_verify: true
+fluentbit_graylog_extra_options: {}
+
+# Grafana Loki output configuration
+fluentbit_loki_enabled: false
+fluentbit_loki_host: "127.0.0.1"
+fluentbit_loki_port: 3100
+fluentbit_loki_uri: "/loki/api/v1/push"
+fluentbit_loki_match: "*"
+fluentbit_loki_tls: false
+fluentbit_loki_tls_verify: true
+fluentbit_loki_tenant_id: ""
+fluentbit_loki_http_user: ""
+fluentbit_loki_http_passwd: ""
+fluentbit_loki_bearer_token: ""
+fluentbit_loki_labels:
+  - "job=fluentbit"
+  - "host=$hostname"
+  - "source=$log_source"
+  - "level=$level"
+fluentbit_loki_line_format: "json"
+fluentbit_loki_extra_options: {}
+
+# Optional stdout and custom outputs
+fluentbit_stdout_enabled: false
+fluentbit_extra_outputs: []

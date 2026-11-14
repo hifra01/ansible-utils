@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: MIT-0
+---
+- name: Converge
+  hosts: all
+  tasks:
+    - name: Include hifra01.utils.fluentbit
+      ansible.builtin.include_role:
+        name: hifra01.utils.fluentbit
+      vars:
+        fluentbit_http_server: true
+        fluentbit_http_port: 2020
+        fluentbit_laravel_enabled: true
+        fluentbit_laravel_log_paths:
+          - "/var/www/demo/storage/logs/*.log"
+        fluentbit_nginx_enabled: true
+        fluentbit_nginx_access_log_paths:
+          - "/var/log/nginx/*access*.log"
+        fluentbit_nginx_error_log_paths:
+          - "/var/log/nginx/*error*.log"
+        fluentbit_system_log_enabled: true
+        fluentbit_system_log_mode: "both"
+        fluentbit_graylog_enabled: true
+        fluentbit_graylog_host: "127.0.0.1"
+        fluentbit_graylog_port: 12201
+        fluentbit_graylog_mode: "udp"
+        fluentbit_loki_enabled: true
+        fluentbit_loki_host: "127.0.0.1"
+        fluentbit_loki_port: 3100
+        fluentbit_extra_outputs:
+          - Name: file
+            Match: "*"
+            Path: /tmp
+            File: fluentbit_all.log
+            Format: plain

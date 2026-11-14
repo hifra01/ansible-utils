@@ -1,0 +1,150 @@
+# SPDX-License-Identifier: MIT-0
+---
+- name: Verify
+  hosts: all
+  tasks:
+    - name: Verify Fluent Bit binary exists
+      ansible.builtin.stat:
+        path: /opt/fluent-bit/bin/fluent-bit
+      register: _fluentbit_binary
+      failed_when: not _fluentbit_binary.stat.exists or not _fluentbit_binary.stat.executable
+
+    - name: Run Fluent Bit dry-run configuration validation
+      ansible.builtin.command:
+        cmd: /opt/fluent-bit/bin/fluent-bit --dry-run --config /etc/fluent-bit/fluent-bit.conf
+      changed_when: false
+
+    - name: Verify Fluent Bit storage directory exists with correct mode
+      ansible.builtin.stat:
+        path: /var/lib/fluent-bit
+      register: _fluentbit_storage_dir
+      failed_when: not _fluentbit_storage_dir.stat.exists or not _fluentbit_storage_dir.stat.isdir or _fluentbit_storage_dir.stat.mode != '0750'
+
+    - name: Verify Fluent Bit service is running
+      ansible.builtin.command:
+        cmd: systemctl is-active fluent-bit
+      register: _fluentbit_service_status
+      changed_when: false
+      failed_when: _fluentbit_service_status.stdout.strip() != 'active'
+
+    - name: Check Fluent Bit HTTP monitoring health endpoint
+      ansible.builtin.uri:
+        url: http://127.0.0.1:2020/api/v1/health
+        status_code: 200
+        return_content: true
+      register: _fluentbit_health
+      failed_when: _fluentbit_health.status != 200
+
+    - name: Inject test Laravel multiline log entry
+      ansible.builtin.copy:
+        dest: /var/www/demo/storage/logs/laravel.log
+        mode: '0644'
+        content: |
+          [2026-11-14 21:00:00] production.ERROR: Sample exception occurred {"user_id":42}
+          #0 /var/www/demo/app/Http/Controllers/TestController.php(15): App\Services\TestService->run()
+          #1 /var/www/demo/vendor/laravel/framework/src/Illuminate/Routing/Controller.php(54): App\Http\Controllers\TestController->index()
+          [stacktrace]
+
+    - name: Inject test Nginx access log entry
+      ansible.builtin.lineinfile:
+        path: /var/log/nginx/access.log
+        line: '192.168.1.100 - user1 [14/Nov/2026:21:00:00 +0000] "GET /api/v1/test HTTP/1.1" 200 1234 "https://example.com" "Mozilla/5.0" "203.0.113.195"'
+        create: true
+        mode: '0644'
+
+    - name: Inject test Nginx error log entry
+      ansible.builtin.lineinfile:
+        path: /var/log/nginx/error.log
+        line: '2026/11/14 21:00:00 [error] 1234#5678: *99 connect() failed (111: Connection refused) while connecting to upstream'
+        create: true
+        mode: '0644'
+
+    - name: Inject test system log entry into syslog file
+      ansible.builtin.lineinfile:
+        path: "{{ '/var/log/syslog' if ansible_facts['os_family'] == 'Debian' else '/var/log/messages' }}"
+        line: "Nov 14 21:00:00 localhost test-unit[123]: Fluentbit system log test event"
+        create: true
+        mode: '0644'
+
+    - name: Inject test system log entry via logger if supported
+      ansible.builtin.command:
+        cmd: logger -t test-unit "Fluentbit system log test event"
+      changed_when: false
+      failed_when: false
+
+    - name: Wait for Fluent Bit flush interval and log processing
+      ansible.builtin.pause:
+        seconds: 6
+
+    - name: Read parsed output log file
+      ansible.builtin.slurp:
+        src: /tmp/fluentbit_all.log
+      register: _fluentbit_parsed_output
+
+    - name: Set parsed log content fact
+      ansible.builtin.set_fact:
+        parsed_log_content: "{{ _fluentbit_parsed_output['content'] | b64decode }}"
+
+    - name: Assert Laravel multiline log was parsed as a consolidated record
+      ansible.builtin.assert:
+        that:
+          - "'\"log_source\":\"laravel\"' in parsed_log_content"
+          - "'\"level\":\"ERROR\"' in parsed_log_content"
+          - "'\"env\":\"production\"' in parsed_log_content"
+          - "'TestController.php(15)' in parsed_log_content"
+          - "'[stacktrace]' in parsed_log_content"
+        fail_msg: "Laravel multiline log was not properly parsed and consolidated into a single record."
+
+    - name: Assert Nginx access log was parsed into structured fields
+      ansible.builtin.assert:
+        that:
+          - "'\"log_source\":\"nginx_access\"' in parsed_log_content"
+          - "'\"code\":\"200\"' in parsed_log_content"
+          - "'\"method\":\"GET\"' in parsed_log_content"
+          - "'\"path\":\"/api/v1/test\"' in parsed_log_content"
+          - "'\"remote\":\"192.168.1.100\"' in parsed_log_content"
+        fail_msg: "Nginx access log was not properly parsed into structured fields."
+
+    - name: Assert Nginx error log was parsed into structured fields
+      ansible.builtin.assert:
+        that:
+          - "'\"log_source\":\"nginx_error\"' in parsed_log_content"
+          - "'\"level\":\"error\"' in parsed_log_content"
+          - "'\"pid\":\"1234\"' in parsed_log_content"
+        fail_msg: "Nginx error log was not properly parsed into structured fields."
+
+    - name: Assert system log was collected
+      ansible.builtin.assert:
+        that:
+          - "'\"log_source\":\"system\"' in parsed_log_content"
+        fail_msg: "System log was not collected."
+
+    - name: Verify Loki received log payloads
+      ansible.builtin.stat:
+        path: /tmp/loki_received.log
+      register: _fluentbit_loki_output
+      failed_when: not _fluentbit_loki_output.stat.exists or _fluentbit_loki_output.stat.size == 0
+
+    - name: Verify Graylog received GELF payloads
+      ansible.builtin.stat:
+        path: /tmp/graylog_received.log
+      register: _fluentbit_graylog_output
+      failed_when: not _fluentbit_graylog_output.stat.exists or _fluentbit_graylog_output.stat.size == 0
+
+    - name: Check SQLite database offset files in storage directory
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /var/lib/fluent-bit/laravel.db
+        - /var/lib/fluent-bit/nginx_access.db
+        - /var/lib/fluent-bit/nginx_error.db
+      register: _fluentbit_db_stats
+
+    - name: Assert SQLite database offset files exist
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: "SQLite database file {{ item.item }} does not exist."
+      loop: "{{ _fluentbit_db_stats.results }}"
+      loop_control:
+        label: "{{ item.item }}"
