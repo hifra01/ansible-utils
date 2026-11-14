@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: MIT-0
+---
+# vars file for nginx_exporter (RedHat family)
+
+nginx_exporter_prerequisite_packages:
+  - ca-certificates
+  - tar
+
+nginx_exporter_service_name: "nginx_exporter"
+nginx_exporter_nologin_shell: "/sbin/nologin"

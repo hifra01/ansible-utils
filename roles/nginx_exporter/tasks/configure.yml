@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for nginx_exporter (configure)
+
+- name: Manage web configuration directory and file
+  when: nginx_exporter_web_config | length > 0
+  block:
+    - name: Ensure nginx_exporter configuration directory exists
+      ansible.builtin.file:
+        path: "{{ nginx_exporter_config_dir }}"
+        state: directory
+        owner: root
+        group: "{{ nginx_exporter_system_group }}"
+        mode: '0750'
+
+    - name: Render nginx_exporter web configuration file
+      ansible.builtin.template:
+        src: config.yml.j2
+        dest: "{{ nginx_exporter_config_dir }}/config.yml"
+        owner: root
+        group: "{{ nginx_exporter_system_group }}"
+        mode: '0640'
+      notify: "validate and restart nginx_exporter"
+
+- name: Ensure nginx_exporter web configuration file is absent when not configured
+  ansible.builtin.file:
+    path: "{{ nginx_exporter_config_dir }}/config.yml"
+    state: absent
+  when: nginx_exporter_web_config | length == 0
+  notify: "validate and restart nginx_exporter"
+
+- name: Render nginx_exporter systemd service unit
+  ansible.builtin.template:
+    src: nginx_exporter.service.j2
+    dest: /etc/systemd/system/nginx_exporter.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: "validate and restart nginx_exporter"
+
+- name: Flush handlers to apply systemd unit and binary updates before service start
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure nginx_exporter service matches configured state
+  ansible.builtin.service:
+    name: "{{ nginx_exporter_service_name }}"
+    enabled: "{{ nginx_exporter_service_enabled }}"
+    state: "{{ nginx_exporter_service_state }}"

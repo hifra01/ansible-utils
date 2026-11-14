@@ -56,6 +56,21 @@ nginx_real_ip_header: "X-Forwarded-For"
 nginx_real_ip_recursive: "on"
 ```
 
+### NGINX Status Endpoint (`stub_status`)
+
+Opt-in configuration for exposing NGINX status metrics (e.g. for Prometheus `nginx_exporter`):
+
+```yaml
+nginx_stub_status_enabled: false
+nginx_stub_status_host: "127.0.0.1"
+nginx_stub_status_port: 8080
+nginx_stub_status_path: "/stub_status"
+nginx_stub_status_allow:
+  - "127.0.0.1"
+  - "::1"
+nginx_stub_status_access_log: "off"
+```
+
 ### Virtual Hosts (`nginx_sites`)
 
 Each item in `nginx_sites` supports:

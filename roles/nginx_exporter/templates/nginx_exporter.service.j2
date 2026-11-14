@@ -1,0 +1,28 @@
+# Managed by Ansible (hifra01.utils.nginx_exporter)
+[Unit]
+Description=Prometheus NGINX Exporter
+Documentation=https://github.com/nginx/nginx-prometheus-exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User={{ nginx_exporter_system_user }}
+Group={{ nginx_exporter_system_group }}
+ExecStart={{ nginx_exporter_bin_dir }}/nginx-prometheus-exporter \
+  --web.listen-address={{ nginx_exporter_web_listen_address }} \
+  --web.telemetry-path={{ nginx_exporter_web_telemetry_path }}{% if nginx_exporter_scrape_uri is string %} \
+  --nginx.scrape-uri={{ nginx_exporter_scrape_uri }}{% else %}{% for uri in nginx_exporter_scrape_uri %} \
+  --nginx.scrape-uri={{ uri }}{% endfor %}{% endif %} \
+  --nginx.timeout={{ nginx_exporter_timeout }}{% if nginx_exporter_nginx_plus | bool %} \
+  --nginx.plus{% endif %}{% if not (nginx_exporter_ssl_verify | bool) %} \
+  --no-nginx.ssl-verify{% endif %}{% if nginx_exporter_web_config | length > 0 %} \
+  --web.config.file={{ nginx_exporter_config_dir }}/config.yml{% endif %}{% for flag in nginx_exporter_extra_flags %} \
+  {{ flag }}{% endfor %}
+
+SyslogIdentifier=nginx_exporter
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: MIT-0
+---
+# defaults file for nginx_exporter
+
+# Prometheus NGINX Exporter release version (without leading 'v')
+nginx_exporter_version: "1.4.1"
+
+# Optional explicit SHA256 checksum digest (64 hex chars).
+# When empty (""), the checksum is fetched automatically from nginx_exporter_checksums_url.
+nginx_exporter_checksum: ""
+
+# Architecture mapping from ansible_architecture to release archive naming
+nginx_exporter_arch_map:
+  x86_64: amd64
+  aarch64: arm64
+  armv7l: armv7
+
+# Download URLs for the release archive and checksums.txt
+nginx_exporter_download_url: >-
+  https://github.com/nginx/nginx-prometheus-exporter/releases/download/v{{ nginx_exporter_version }}/nginx-prometheus-exporter_{{
+  nginx_exporter_version }}_linux_{{
+  nginx_exporter_arch_map[ansible_facts['architecture'] | default(ansible_architecture)] |
+  default(ansible_facts['architecture'] | default(ansible_architecture)) }}.tar.gz
+nginx_exporter_checksums_url: >-
+  https://github.com/nginx/nginx-prometheus-exporter/releases/download/v{{ nginx_exporter_version }}/nginx-prometheus-exporter_{{
+  nginx_exporter_version }}_checksums.txt
+
+# Installation & configuration paths
+nginx_exporter_bin_dir: "/usr/local/bin"
+nginx_exporter_config_dir: "/etc/nginx_exporter"
+
+# Dedicated unprivileged system account
+nginx_exporter_system_user: "nginx_exporter"
+nginx_exporter_system_group: "nginx_exporter"
+
+# Network listen socket and HTTP telemetry path
+nginx_exporter_web_listen_address: "0.0.0.0:9113"
+nginx_exporter_web_telemetry_path: "/metrics"
+
+# Target NGINX stub_status or NGINX Plus API URI(s).
+# Accepts either a single URI string or a list of URI strings.
+nginx_exporter_scrape_uri: "http://127.0.0.1:8080/stub_status"
+
+# NGINX Plus API mode and scrape behavior
+nginx_exporter_nginx_plus: false
+nginx_exporter_ssl_verify: true
+nginx_exporter_timeout: "5s"
+
+# Raw extra command-line flags passed to nginx-prometheus-exporter
+nginx_exporter_extra_flags: []
+
+# Optional web configuration (TLS and/or Basic Auth) rendered to {{ nginx_exporter_config_dir }}/config.yml
+nginx_exporter_web_config: {}
+
+# Service lifecycle management
+nginx_exporter_service_enabled: true
+nginx_exporter_service_state: "started"

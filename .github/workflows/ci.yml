@@ -51,6 +51,7 @@ jobs:
       frankenphp: ${{ steps.filter.outputs.frankenphp }}
       linux_users: ${{ steps.filter.outputs.linux_users }}
       nginx: ${{ steps.filter.outputs.nginx }}
+      nginx_exporter: ${{ steps.filter.outputs.nginx_exporter }}
       node_exporter: ${{ steps.filter.outputs.node_exporter }}
       percona_mongodb: ${{ steps.filter.outputs.percona_mongodb }}
       percona_mysql: ${{ steps.filter.outputs.percona_mysql }}
@@ -81,6 +82,8 @@ jobs:
               - 'roles/linux_users/**'
             nginx:
               - 'roles/nginx/**'
+            nginx_exporter:
+              - 'roles/nginx_exporter/**'
             node_exporter:
               - 'roles/node_exporter/**'
             percona_mongodb:
@@ -109,6 +112,7 @@ jobs:
           - frankenphp
           - linux_users
           - nginx
+          - nginx_exporter
           - node_exporter
           - percona_mongodb
           - percona_mysql
@@ -155,6 +159,7 @@ jobs:
             frankenphp)  changed="${{ needs.detect-changes.outputs.frankenphp }}" ;;
             linux_users) changed="${{ needs.detect-changes.outputs.linux_users }}" ;;
             nginx)       changed="${{ needs.detect-changes.outputs.nginx }}" ;;
+            nginx_exporter) changed="${{ needs.detect-changes.outputs.nginx_exporter }}" ;;
             node_exporter) changed="${{ needs.detect-changes.outputs.node_exporter }}" ;;
             percona_mongodb) changed="${{ needs.detect-changes.outputs.percona_mongodb }}" ;;
             percona_mysql) changed="${{ needs.detect-changes.outputs.percona_mysql }}" ;;

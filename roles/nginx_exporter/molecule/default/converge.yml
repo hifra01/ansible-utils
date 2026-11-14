@@ -1,0 +1,24 @@
+---
+- name: Converge
+  hosts: all
+  tasks:
+    - name: "Include hifra01.utils.nginx with stub_status enabled"
+      ansible.builtin.include_role:
+        name: "hifra01.utils.nginx"
+      vars:
+        nginx_stub_status_enabled: true
+        nginx_stub_status_host: "127.0.0.1"
+        nginx_stub_status_port: 8080
+        nginx_stub_status_path: "/stub_status"
+
+    - name: "Include hifra01.utils.nginx_exporter"
+      ansible.builtin.include_role:
+        name: "hifra01.utils.nginx_exporter"
+      vars:
+        nginx_exporter_web_listen_address: "0.0.0.0:9113"
+        nginx_exporter_scrape_uri: "http://127.0.0.1:8080/stub_status"
+        nginx_exporter_extra_flags:
+          - "--log.level=info"
+        nginx_exporter_web_config:
+          basic_auth_users:
+            prometheus: "$2b$12$xZ7zEaVjOgF6mGHmDSMcRuMz5Zvp2o4ysMEau1sCcfzgI.r4Ktsd6"
