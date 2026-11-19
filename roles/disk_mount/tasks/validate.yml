@@ -1,0 +1,191 @@
+# SPDX-License-Identifier: MIT-0
+---
+# Pre-flight validation and entry normalization for disk_mount
+
+- name: Validate role-level default variables
+  ansible.builtin.assert:
+    that:
+      - disk_mount_disks is sequence and disk_mount_disks is not string
+      - disk_mount_default_fstype in ['ext4', 'xfs', 'btrfs', 'ext3', 'vfat']
+      - disk_mount_default_partition is boolean
+      - disk_mount_default_partition_table in ['gpt', 'msdos']
+      - disk_mount_default_auto_mount is boolean
+      - disk_mount_default_opts is string and (disk_mount_default_opts | trim | length > 0)
+      - disk_mount_default_fstab_src_type in ['uuid', 'partuuid', 'label', 'device']
+      - disk_mount_default_allow_non_empty is boolean
+      - disk_mount_fstab_path is string and (disk_mount_fstab_path is match('^/.+'))
+      - disk_mount_backup_fstab is boolean
+    fail_msg: >-
+      Invalid disk_mount_* role defaults: check disk_mount_disks (list), disk_mount_default_fstype,
+      disk_mount_default_partition, disk_mount_default_partition_table, disk_mount_default_auto_mount,
+      disk_mount_default_opts, disk_mount_default_fstab_src_type, disk_mount_default_allow_non_empty,
+      disk_mount_fstab_path (absolute path), and disk_mount_backup_fstab.
+
+- name: Initialize normalized disk mount entries list
+  ansible.builtin.set_fact:
+    _disk_mount_entries: []
+
+- name: Validate and normalize each disk_mount_disks entry
+  when: disk_mount_disks | length > 0
+  block:
+    - name: Validate raw disk entry schema and field constraints
+      ansible.builtin.assert:
+        that:
+          - _disk_mount_raw is mapping
+          - _disk_mount_raw.device is defined
+          - _disk_mount_raw.device is string
+          - _disk_mount_raw.device is match('^/dev/[^\\s]+$')
+          - _disk_mount_raw.path is defined
+          - _disk_mount_raw.path is string
+          - _disk_mount_raw.path is match('^/')
+          - _norm_path not in ['/', '/boot', '/dev', '/proc', '/sys', '/run']
+          - _fstype in ['ext4', 'xfs', 'btrfs', 'ext3', 'vfat']
+          - _state in ['mounted', 'present', 'unmounted', 'absent']
+          - _auto_mount is boolean
+          - not (_state == 'present' and not (_auto_mount | bool))
+          - _partition is boolean
+          - _partition_table in ['gpt', 'msdos']
+          - >-
+            _partition_number is not boolean and
+            (_partition_number is integer or
+            (_partition_number is string and (_partition_number is match('^[1-9][0-9]*$'))))
+          - (_partition_number | int) >= 1
+          - (_partition_table != 'msdos') or ((_partition_number | int) <= 4)
+          - _partition_start is string and (_partition_start | trim | length > 0)
+          - _partition_end is string and (_partition_end | trim | length > 0)
+          - _partition_name is string
+          - (_partition_name | length == 0) or (_partition | bool and _partition_table == 'gpt')
+          - _partition_flags is sequence and _partition_flags is not string
+          - _partition_align in ['optimal', 'minimal', 'cylinder', 'none']
+          - _label is string
+          - _label is not match('.*\\s.*')
+          - (_fstab_src_type != 'label') or (_label | trim | length > 0)
+          - _mkfs_opts is string
+          - _opts is string and (_opts | trim | length > 0)
+          - _dump is not boolean and (_dump | string) is match('^[01]$')
+          - _passno is not boolean and (_passno | string) is match('^[012]$')
+          - _fstab_src_type in ['uuid', 'partuuid', 'label', 'device']
+          - _owner is string or (_owner is integer and _owner is not boolean)
+          - _group is string or (_group is integer and _group is not boolean)
+          - _mode is string
+          - (_mode | length == 0) or (_mode is match('^0?[0-7]{3,4}$'))
+          - _allow_non_empty is boolean
+          - _force is boolean
+        fail_msg: >-
+          Invalid disk_mount_disks entry at index {{ _disk_mount_idx }}
+          (device={{ _disk_mount_raw.device | default('<missing>') }},
+          path={{ _disk_mount_raw.path | default('<missing>') }}).
+          Verify device starts with /dev/, path is an absolute non-protected path,
+          partition/fstype/state/fstab_src_type/opts/dump/passno/mode are valid,
+          label has no whitespace and is non-empty when fstab_src_type=='label',
+          partition_name is only set with partition_table=='gpt',
+          and state=='present' is not combined with auto_mount==false.
+      vars:
+        _norm_path: "{{ (_disk_mount_raw.path | default('') | regex_replace('/+$', '')) | default('/', true) }}"
+        _fstype: "{{ _disk_mount_raw.fstype | default(disk_mount_default_fstype) }}"
+        _state: "{{ _disk_mount_raw.state | default('mounted') }}"
+        _auto_mount: "{{ _disk_mount_raw.auto_mount | default(disk_mount_default_auto_mount) }}"
+        _partition: "{{ _disk_mount_raw.partition | default(disk_mount_default_partition) }}"
+        _partition_table: "{{ _disk_mount_raw.partition_table | default(disk_mount_default_partition_table) }}"
+        _partition_number: "{{ _disk_mount_raw.partition_number | default(1) }}"
+        _partition_start: "{{ _disk_mount_raw.partition_start | default('0%') }}"
+        _partition_end: "{{ _disk_mount_raw.partition_end | default('100%') }}"
+        _partition_name: "{{ _disk_mount_raw.partition_name | default('') }}"
+        _partition_flags: "{{ _disk_mount_raw.partition_flags | default([]) }}"
+        _partition_align: "{{ _disk_mount_raw.partition_align | default('optimal') }}"
+        _label: "{{ _disk_mount_raw.label | default('') }}"
+        _mkfs_opts: "{{ _disk_mount_raw.mkfs_opts | default('') }}"
+        _opts: "{{ _disk_mount_raw.opts | default(disk_mount_default_opts) }}"
+        _dump: "{{ _disk_mount_raw.dump | default(0) }}"
+        _passno: "{{ _disk_mount_raw.passno | default(0) }}"
+        _fstab_src_type: "{{ _disk_mount_raw.fstab_src_type | default(disk_mount_default_fstab_src_type) }}"
+        _owner: "{{ _disk_mount_raw.owner | default('') }}"
+        _group: "{{ _disk_mount_raw.group | default('') }}"
+        _mode: "{{ _disk_mount_raw.mode | default('') }}"
+        _allow_non_empty: "{{ _disk_mount_raw.allow_non_empty | default(disk_mount_default_allow_non_empty) }}"
+        _force: "{{ _disk_mount_raw.force | default(false) }}"
+      loop: "{{ disk_mount_disks }}"
+      loop_control:
+        loop_var: _disk_mount_raw
+        index_var: _disk_mount_idx
+
+    - name: Normalize disk entries with defaults and derived target device fields
+      ansible.builtin.set_fact:
+        _disk_mount_entries: "{{ _disk_mount_entries + [_normalized_entry] }}"
+      vars:
+        _fstype: "{{ _disk_mount_raw.fstype | default(disk_mount_default_fstype) }}"
+        _partition: "{{ (_disk_mount_raw.partition | default(disk_mount_default_partition)) | bool }}"
+        _partition_number: "{{ (_disk_mount_raw.partition_number | default(1)) | int }}"
+        _label: "{{ _disk_mount_raw.label | default('') }}"
+        _mkfs_opts: "{{ _disk_mount_raw.mkfs_opts | default('') | trim }}"
+        _label_part: "{{ (disk_mount_label_flags[_fstype] ~ ' ' ~ _label) if (_label | length > 0) else '' }}"
+        _target_device: >-
+          {%- if not _partition -%}
+          {{ _disk_mount_raw.device }}
+          {%- elif _disk_mount_raw.device is match('.*[0-9]$') -%}
+          {{ _disk_mount_raw.device }}p{{ _partition_number }}
+          {%- else -%}
+          {{ _disk_mount_raw.device }}{{ _partition_number }}
+          {%- endif -%}
+        _normalized_entry:
+          device: "{{ _disk_mount_raw.device }}"
+          path: "{{ (_disk_mount_raw.path | regex_replace('/+$', '')) | default('/', true) }}"
+          normalized_path: "{{ (_disk_mount_raw.path | regex_replace('/+$', '')) | default('/', true) }}"
+          target_device: "{{ _target_device | trim }}"
+          fstype: "{{ _fstype }}"
+          state: "{{ _disk_mount_raw.state | default('mounted') }}"
+          auto_mount: "{{ (_disk_mount_raw.auto_mount | default(disk_mount_default_auto_mount)) | bool }}"
+          partition: "{{ _partition }}"
+          partition_table: "{{ _disk_mount_raw.partition_table | default(disk_mount_default_partition_table) }}"
+          partition_number: "{{ _partition_number }}"
+          partition_start: "{{ _disk_mount_raw.partition_start | default('0%') }}"
+          partition_end: "{{ _disk_mount_raw.partition_end | default('100%') }}"
+          partition_name: "{{ _disk_mount_raw.partition_name | default('') }}"
+          partition_flags: "{{ _disk_mount_raw.partition_flags | default([]) }}"
+          partition_align: "{{ _disk_mount_raw.partition_align | default('optimal') }}"
+          label: "{{ _label }}"
+          mkfs_opts: "{{ _mkfs_opts }}"
+          effective_mkfs_opts: "{{ ([_label_part, _mkfs_opts] | reject('equalto', '') | join(' ')) | trim }}"
+          opts: "{{ _disk_mount_raw.opts | default(disk_mount_default_opts) }}"
+          dump: "{{ (_disk_mount_raw.dump | default(0)) | int }}"
+          passno: "{{ (_disk_mount_raw.passno | default(0)) | int }}"
+          fstab_src_type: "{{ _disk_mount_raw.fstab_src_type | default(disk_mount_default_fstab_src_type) }}"
+          owner: "{{ (_disk_mount_raw.owner | default('')) | string }}"
+          group: "{{ (_disk_mount_raw.group | default('')) | string }}"
+          mode: "{{ _disk_mount_raw.mode | default('') }}"
+          allow_non_empty: "{{ (_disk_mount_raw.allow_non_empty | default(disk_mount_default_allow_non_empty)) | bool }}"
+          force: "{{ (_disk_mount_raw.force | default(false)) | bool }}"
+      loop: "{{ disk_mount_disks }}"
+      loop_control:
+        loop_var: _disk_mount_raw
+
+    - name: Validate cross-entry uniqueness and parent-device consistency
+      ansible.builtin.assert:
+        that:
+          - (_disk_mount_entries | map(attribute='normalized_path') | list | unique | length) == (_disk_mount_entries | length)
+          - (_disk_mount_entries | map(attribute='target_device') | list | unique | length) == (_disk_mount_entries | length)
+          - (_partitioned_devices | intersect(_whole_devices) | length) == 0
+        fail_msg: >-
+          Conflicting disk_mount_disks definitions detected: mount paths and target block devices
+          must be unique, and partition: true cannot be mixed with partition: false on the same parent device.
+      vars:
+        _partitioned_devices: "{{ _disk_mount_entries | selectattr('partition', 'equalto', true) | map(attribute='device') | unique | list }}"
+        _whole_devices: "{{ _disk_mount_entries | selectattr('partition', 'equalto', false) | map(attribute='device') | unique | list }}"
+
+    - name: Validate consistent partition_table for multi-partition entries sharing a parent device
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_disk_mount_entries
+            | selectattr('partition', 'equalto', true)
+            | selectattr('device', 'equalto', _disk_mount_parent_dev)
+            | map(attribute='partition_table')
+            | unique
+            | list
+            | length) == 1
+        fail_msg: >-
+          Multiple partition entries on parent device {{ _disk_mount_parent_dev }} specify
+          conflicting partition_table values. All partitions on the same disk must share the same partition_table.
+      loop: "{{ _disk_mount_entries | selectattr('partition', 'equalto', true) | map(attribute='device') | unique | list }}"
+      loop_control:
+        loop_var: _disk_mount_parent_dev

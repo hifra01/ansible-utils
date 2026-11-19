@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: MIT-0
+---
+# On-demand package installation for disk_mount
+
+- name: Build required package list for active disk entries
+  ansible.builtin.set_fact:
+    _disk_mount_active_entries: "{{ _disk_mount_entries | selectattr('state', 'in', ['mounted', 'present']) | list }}"
+    _disk_mount_required_packages: >-
+      {{
+        (
+          disk_mount_base_packages
+          + (
+              _disk_mount_entries
+              | selectattr('state', 'in', ['mounted', 'present'])
+              | map(attribute='fstype')
+              | unique
+              | map('extract', disk_mount_fs_packages)
+              | list
+              | flatten
+            )
+        ) | unique | list
+      }}
+
+- name: Update apt cache on Debian family
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when:
+    - _disk_mount_active_entries | length > 0
+    - ansible_facts['os_family'] == 'Debian'
+
+- name: Install required storage and filesystem packages
+  ansible.builtin.package:
+    name: "{{ _disk_mount_required_packages }}"
+    state: present
+  when: _disk_mount_active_entries | length > 0

@@ -1,0 +1,41 @@
+---
+- name: Converge
+  hosts: all
+  tasks:
+    - name: Read Molecule loopback device mapping from target host
+      ansible.builtin.slurp:
+        src: /var/tmp/molecule-loop-devices.yml
+      register: _converge_loop_map_raw
+
+    - name: Parse Molecule loopback device mapping
+      ansible.builtin.set_fact:
+        _converge_loop_map: "{{ _converge_loop_map_raw.content | b64decode | from_yaml }}"
+
+    - name: Apply hifra01.utils.disk_mount across loopback test disks
+      ansible.builtin.include_role:
+        name: hifra01.utils.disk_mount
+      vars:
+        disk_mount_disks:
+          - device: "{{ _converge_loop_map.molecule_loop_disk1 }}"
+            path: "/mnt/data_ext4"
+            fstype: "ext4"
+            auto_mount: true
+            owner: "root"
+            group: "root"
+            mode: "0750"
+
+          - device: "{{ _converge_loop_map.molecule_loop_disk2 }}"
+            path: "/mnt/data_xfs"
+            partition: true
+            partition_table: "msdos"
+            fstype: "xfs"
+            label: "XFS_DATA"
+            fstab_src_type: "label"
+            auto_mount: true
+
+          - device: "{{ _converge_loop_map.molecule_loop_disk3 }}"
+            path: "/mnt/data_ephemeral"
+            partition: false
+            fstype: "ext4"
+            mkfs_opts: "-m 1"
+            auto_mount: false

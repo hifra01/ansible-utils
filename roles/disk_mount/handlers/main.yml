@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: MIT-0
+---
+# handlers file for disk_mount
+
+- name: Reload systemd daemon after fstab changes
+  listen: "reload systemd daemon"
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: ansible_facts['service_mgr'] | default('') == 'systemd'

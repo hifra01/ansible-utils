@@ -1,0 +1,71 @@
+---
+- name: Cleanup
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Check if loopback device mapping file exists
+      ansible.builtin.stat:
+        path: /var/tmp/molecule-loop-devices.yml
+      register: _disk_mount_loop_map_stat
+
+    - name: Read loopback device mapping from target host when present
+      ansible.builtin.slurp:
+        src: /var/tmp/molecule-loop-devices.yml
+      register: _disk_mount_loop_map_raw
+      when: _disk_mount_loop_map_stat.stat.exists
+
+    - name: Parse loopback device mapping
+      ansible.builtin.set_fact:
+        _disk_mount_loop_map: "{{ _disk_mount_loop_map_raw.content | b64decode | from_yaml }}"
+      when: _disk_mount_loop_map_stat.stat.exists
+
+    - name: Unmount any active test mounts and detach recorded loopback devices
+      ansible.builtin.shell: |
+        set -euo pipefail
+        for dev in {{ _disk_mount_loop_map.molecule_loop_disk1 | quote }} \
+                   {{ _disk_mount_loop_map.molecule_loop_disk2 | quote }} \
+                   {{ _disk_mount_loop_map.molecule_loop_disk3 | quote }} \
+                   {{ _disk_mount_loop_map.molecule_loop_disk4 | quote }}; do
+          [ -n "$dev" ] || continue
+          for target in $(findmnt -rn -o TARGET | while read -r mp; do
+            src="$(findmnt -rn -o SOURCE -M "$mp" 2>/dev/null || true)"
+            case "$src" in
+              "$dev"*) printf '%s\n' "$mp" ;;
+            esac
+          done); do
+            umount "$target" || umount -l "$target" || true
+          done
+          if losetup "$dev" >/dev/null 2>&1; then
+            losetup -d "$dev" || true
+          fi
+        done
+      args:
+        executable: /bin/bash
+      changed_when: false
+      when: _disk_mount_loop_map_stat.stat.exists
+
+    - name: Detach any fallback loopback devices matching container image paths
+      ansible.builtin.shell: |
+        set -euo pipefail
+        for name in disk1 disk2 disk3 disk4; do
+          img="/var/tmp/${name}.img"
+          if [ -e "$img" ]; then
+            for dev in $(losetup -j "$img" 2>/dev/null | awk -F: '{print $1}'); do
+              [ -n "$dev" ] && losetup -d "$dev" || true
+            done
+          fi
+        done
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Remove temporary sparse backing files and mapping file
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/tmp/disk1.img
+        - /var/tmp/disk2.img
+        - /var/tmp/disk3.img
+        - /var/tmp/disk4.img
+        - /var/tmp/molecule-loop-devices.yml

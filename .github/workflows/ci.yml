@@ -46,6 +46,7 @@ jobs:
       apt_mirror: ${{ steps.filter.outputs.apt_mirror }}
       consul: ${{ steps.filter.outputs.consul }}
       datetime: ${{ steps.filter.outputs.datetime }}
+      disk_mount: ${{ steps.filter.outputs.disk_mount }}
       docker: ${{ steps.filter.outputs.docker }}
       fluentbit: ${{ steps.filter.outputs.fluentbit }}
       frankenphp: ${{ steps.filter.outputs.frankenphp }}
@@ -72,6 +73,8 @@ jobs:
               - 'roles/consul/**'
             datetime:
               - 'roles/datetime/**'
+            disk_mount:
+              - 'roles/disk_mount/**'
             docker:
               - 'roles/docker/**'
             fluentbit:
@@ -107,6 +110,7 @@ jobs:
           - apt_mirror
           - consul
           - datetime
+          - disk_mount
           - docker
           - fluentbit
           - frankenphp
@@ -154,6 +158,7 @@ jobs:
             apt_mirror)  changed="${{ needs.detect-changes.outputs.apt_mirror }}" ;;
             consul)      changed="${{ needs.detect-changes.outputs.consul }}" ;;
             datetime)    changed="${{ needs.detect-changes.outputs.datetime }}" ;;
+            disk_mount)  changed="${{ needs.detect-changes.outputs.disk_mount }}" ;;
             docker)      changed="${{ needs.detect-changes.outputs.docker }}" ;;
             fluentbit)   changed="${{ needs.detect-changes.outputs.fluentbit }}" ;;
             frankenphp)  changed="${{ needs.detect-changes.outputs.frankenphp }}" ;;

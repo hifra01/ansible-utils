@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: MIT-0
+---
+# Filesystem inspection and formatting tasks for disk_mount
+
+- name: Inspect existing filesystem type on target block device
+  ansible.builtin.command: "blkid -o value -s TYPE {{ _disk_mount_entry.target_device | quote }}"
+  register: _disk_mount_blkid_type
+  changed_when: false
+  failed_when: _disk_mount_blkid_type.rc not in [0, 2]
+
+- name: Record detected filesystem type
+  ansible.builtin.set_fact:
+    _disk_mount_existing_fstype: "{{ _disk_mount_blkid_type.stdout | trim }}"
+
+- name: Fail fast on mismatched existing filesystem when force is false
+  ansible.builtin.fail:
+    msg: >-
+      Safety check blocked formatting {{ _disk_mount_entry.target_device }}:
+      existing filesystem '{{ _disk_mount_existing_fstype }}' differs from requested '{{ _disk_mount_entry.fstype }}'.
+      Set force: true to unmount and reformat (destructive).
+  when:
+    - _disk_mount_existing_fstype | length > 0
+    - _disk_mount_existing_fstype != _disk_mount_entry.fstype
+    - not (_disk_mount_entry.force | bool)
+
+- name: Unmount and reformat mismatched filesystem when force is true
+  when:
+    - _disk_mount_existing_fstype | length > 0
+    - _disk_mount_existing_fstype != _disk_mount_entry.fstype
+    - _disk_mount_entry.force | bool
+  block:
+    - name: Find active mount points for target block device before reformatting
+      ansible.builtin.command: "findmnt -rn -o TARGET -S {{ _disk_mount_entry.target_device | quote }}"
+      register: _disk_mount_reformat_mounts
+      changed_when: false
+      failed_when: false
+
+    - name: Unmount active mount points prior to reformatting
+      ansible.posix.mount:
+        path: "{{ _disk_mount_umount_mp }}"
+        state: unmounted
+      loop: "{{ _disk_mount_reformat_mounts.stdout_lines | reject('equalto', '') | list }}"
+      loop_control:
+        loop_var: _disk_mount_umount_mp
+
+    - name: Force format target device with requested filesystem
+      community.general.filesystem:
+        dev: "{{ _disk_mount_entry.target_device }}"
+        fstype: "{{ _disk_mount_entry.fstype }}"
+        opts: "{{ _disk_mount_entry.effective_mkfs_opts if (_disk_mount_entry.effective_mkfs_opts | length > 0) else omit }}"
+        force: true
+
+- name: Format unformatted target device with requested filesystem
+  community.general.filesystem:
+    dev: "{{ _disk_mount_entry.target_device }}"
+    fstype: "{{ _disk_mount_entry.fstype }}"
+    opts: "{{ _disk_mount_entry.effective_mkfs_opts if (_disk_mount_entry.effective_mkfs_opts | length > 0) else omit }}"
+    force: false
+  when: _disk_mount_existing_fstype | length == 0

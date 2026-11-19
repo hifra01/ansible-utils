@@ -1,0 +1,77 @@
+---
+- name: Prepare
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Install Python 3.9 on RHEL/Rocky 8
+      ansible.builtin.raw: |
+        if [ -f /etc/redhat-release ] && grep -q 'release 8' /etc/redhat-release; then
+          command -v python3.9 >/dev/null 2>&1 || dnf install -y python39
+        fi
+      changed_when: false
+
+    - name: Gather minimal facts after Python bootstrap
+      ansible.builtin.setup:
+        gather_subset:
+          - min
+
+    - name: Ensure loop device nodes exist in container /dev
+      ansible.builtin.shell: |
+        set -euo pipefail
+        for i in $(seq 0 127); do
+          dev="/dev/loop${i}"
+          if [ ! -e "$dev" ]; then
+            mknod -m 0660 "$dev" b 7 "$i"
+          fi
+        done
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Create 320 MB sparse backing files for loopback block devices
+      ansible.builtin.command: "truncate -s 320M /var/tmp/{{ item }}.img"
+      args:
+        creates: "/var/tmp/{{ item }}.img"
+      loop:
+        - disk1
+        - disk2
+        - disk3
+        - disk4
+
+    - name: Attach deterministic loopback block devices with partition scanning
+      ansible.builtin.shell: |
+        set -euo pipefail
+        img="/var/tmp/{{ item }}.img"
+        existing="$(losetup -j "$img" | awk -F: 'NR==1 {print $1}')"
+        if [ -n "$existing" ]; then
+          printf '%s\n' "$existing"
+          exit 0
+        fi
+        for attempt in 1 2 3 4 5; do
+          if dev="$(losetup -P --find --show "$img" 2>/dev/null)"; then
+            printf '%s\n' "$dev"
+            exit 0
+          fi
+          sleep 0.2
+        done
+        losetup -P --find --show "$img"
+      args:
+        executable: /bin/bash
+      register: _disk_mount_loop_attach
+      changed_when: false
+      loop:
+        - disk1
+        - disk2
+        - disk3
+        - disk4
+
+    - name: Persist loopback device mapping for converge, verify, and cleanup
+      ansible.builtin.copy:
+        dest: /var/tmp/molecule-loop-devices.yml
+        mode: '0644'
+        content: |
+          ---
+          molecule_loop_disk1: "{{ _disk_mount_loop_attach.results[0].stdout | trim }}"
+          molecule_loop_disk2: "{{ _disk_mount_loop_attach.results[1].stdout | trim }}"
+          molecule_loop_disk3: "{{ _disk_mount_loop_attach.results[2].stdout | trim }}"
+          molecule_loop_disk4: "{{ _disk_mount_loop_attach.results[3].stdout | trim }}"

@@ -1,0 +1,397 @@
+---
+- name: Verify
+  hosts: all
+  tasks:
+    - name: Read Molecule loopback device mapping from target host
+      ansible.builtin.slurp:
+        src: /var/tmp/molecule-loop-devices.yml
+      register: _verify_loop_map_raw
+
+    - name: Set loopback device path facts for verification
+      ansible.builtin.set_fact:
+        molecule_loop_disk1: "{{ (_verify_loop_map_raw.content | b64decode | from_yaml).molecule_loop_disk1 }}"
+        molecule_loop_disk2: "{{ (_verify_loop_map_raw.content | b64decode | from_yaml).molecule_loop_disk2 }}"
+        molecule_loop_disk3: "{{ (_verify_loop_map_raw.content | b64decode | from_yaml).molecule_loop_disk3 }}"
+        molecule_loop_disk4: "{{ (_verify_loop_map_raw.content | b64decode | from_yaml).molecule_loop_disk4 }}"
+
+    - name: Inspect Disk 1 partition table, filesystem, and mount state
+      ansible.builtin.command: "{{ item }}"
+      register: _verify_disk1_cmds
+      changed_when: false
+      loop:
+        - "blkid -o value -s PTTYPE {{ molecule_loop_disk1 }}"
+        - "blkid -o value -s TYPE {{ molecule_loop_disk1 }}p1"
+        - "findmnt -rn -o SOURCE,FSTYPE,OPTIONS -M /mnt/data_ext4"
+
+    - name: Stat /mnt/data_ext4 mounted root directory
+      ansible.builtin.stat:
+        path: /mnt/data_ext4
+      register: _verify_disk1_stat
+
+    - name: Read /etc/fstab for persistent mount assertions
+      ansible.builtin.slurp:
+        src: /etc/fstab
+      register: _verify_fstab_raw
+
+    - name: Set decoded fstab content fact
+      ansible.builtin.set_fact:
+        _verify_fstab_text: "{{ _verify_fstab_raw.content | b64decode }}"
+
+    - name: Assert Disk 1 GPT, ext4, mount options, ownership/mode, and UUID fstab entry
+      ansible.builtin.assert:
+        that:
+          - (_verify_disk1_cmds.results[0].stdout | trim) == 'gpt'
+          - (_verify_disk1_cmds.results[1].stdout | trim) == 'ext4'
+          - "'/mnt/data_ext4' in _verify_fstab_text"
+          - "'UUID=' in _verify_fstab_text"
+          - "'defaults,nofail' in _verify_fstab_text"
+          - "(molecule_loop_disk1 ~ 'p1') in (_verify_disk1_cmds.results[2].stdout | trim)"
+          - "'ext4' in (_verify_disk1_cmds.results[2].stdout | trim)"
+          - "'rw' in (_verify_disk1_cmds.results[2].stdout | trim)"
+          - _verify_disk1_stat.stat.mode == '0750'
+          - _verify_disk1_stat.stat.pw_name == 'root'
+          - _verify_disk1_stat.stat.gr_name == 'root'
+
+    - name: Write marker file to /mnt/data_ext4 for reboot simulation test
+      ansible.builtin.copy:
+        dest: /mnt/data_ext4/marker.txt
+        content: "persistent-data-ok\n"
+        mode: '0644'
+
+    - name: Simulate reboot unmount and mount -a recovery for /mnt/data_ext4
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umount /mnt/data_ext4
+        ! findmnt -rn -M /mnt/data_ext4 >/dev/null 2>&1
+        test ! -e /mnt/data_ext4/marker.txt
+        mount -a
+        findmnt -rn -M /mnt/data_ext4 >/dev/null 2>&1
+        [ "$(cat /mnt/data_ext4/marker.txt)" = "persistent-data-ok" ]
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Inspect Disk 2 partition table, XFS filesystem, label, and mount state
+      ansible.builtin.command: "{{ item }}"
+      register: _verify_disk2_cmds
+      changed_when: false
+      loop:
+        - "blkid -o value -s PTTYPE {{ molecule_loop_disk2 }}"
+        - "blkid -o value -s TYPE {{ molecule_loop_disk2 }}p1"
+        - "blkid -o value -s LABEL {{ molecule_loop_disk2 }}p1"
+        - "findmnt -rn -o SOURCE,FSTYPE -M /mnt/data_xfs"
+
+    - name: Assert Disk 2 MBR, XFS, label, active mount, and LABEL= fstab entry
+      ansible.builtin.assert:
+        that:
+          - (_verify_disk2_cmds.results[0].stdout | trim) == 'dos'
+          - (_verify_disk2_cmds.results[1].stdout | trim) == 'xfs'
+          - (_verify_disk2_cmds.results[2].stdout | trim) == 'XFS_DATA'
+          - "(molecule_loop_disk2 ~ 'p1') in (_verify_disk2_cmds.results[3].stdout | trim)"
+          - "'xfs' in (_verify_disk2_cmds.results[3].stdout | trim)"
+          - "'LABEL=XFS_DATA' in _verify_fstab_text"
+          - "'/mnt/data_xfs' in _verify_fstab_text"
+
+    - name: Inspect Disk 3 whole-disk filesystem and ephemeral mount state
+      ansible.builtin.command: "blkid -o value -s PTTYPE {{ molecule_loop_disk3 }}"
+      register: _verify_disk3_pttype
+      changed_when: false
+      failed_when: _verify_disk3_pttype.rc not in [0, 2]
+
+    - name: Inspect Disk 3 filesystem type and active mount
+      ansible.builtin.command: "{{ item }}"
+      register: _verify_disk3_cmds
+      changed_when: false
+      loop:
+        - "blkid -o value -s TYPE {{ molecule_loop_disk3 }}"
+        - "findmnt -rn -o SOURCE,FSTYPE -M /mnt/data_ephemeral"
+
+    - name: Assert Disk 3 has no partition table, ext4 filesystem, active mount, and no fstab entry
+      ansible.builtin.assert:
+        that:
+          - (_verify_disk3_pttype.stdout | trim) == ''
+          - (_verify_disk3_cmds.results[0].stdout | trim) == 'ext4'
+          - "molecule_loop_disk3 in (_verify_disk3_cmds.results[1].stdout | trim)"
+          - "'ext4' in (_verify_disk3_cmds.results[1].stdout | trim)"
+          - "'/mnt/data_ephemeral' not in _verify_fstab_text"
+
+    - name: Write marker file to /mnt/data_ephemeral to verify writability
+      ansible.builtin.copy:
+        dest: /mnt/data_ephemeral/ephemeral.txt
+        content: "ephemeral-data-ok\n"
+        mode: '0644'
+
+    - name: Verify empty disk_mount_disks completes cleanly as a no-op
+      ansible.builtin.include_role:
+        name: hifra01.utils.disk_mount
+      vars:
+        disk_mount_disks: []
+
+    - name: Provision Disk 4 with GPT and ext4 at /mnt/data_verify for lifecycle and safety tests
+      ansible.builtin.include_role:
+        name: hifra01.utils.disk_mount
+      vars:
+        disk_mount_disks:
+          - device: "{{ molecule_loop_disk4 }}"
+            path: "/mnt/data_verify"
+            fstype: "ext4"
+            auto_mount: true
+
+    - name: Write marker file on Disk 4 to verify safety guards preserve data
+      ansible.builtin.copy:
+        dest: /mnt/data_verify/keep.txt
+        content: "must-not-be-lost\n"
+        mode: '0644'
+
+    - name: Test state=unmounted preserves fstab entry and disk data
+      ansible.builtin.include_role:
+        name: hifra01.utils.disk_mount
+      vars:
+        disk_mount_disks:
+          - device: "{{ molecule_loop_disk4 }}"
+            path: "/mnt/data_verify"
+            state: "unmounted"
+
+    - name: Verify /mnt/data_verify is unmounted while fstab entry remains
+      ansible.builtin.shell: |
+        set -euo pipefail
+        ! findmnt -rn -M /mnt/data_verify >/dev/null 2>&1
+        grep -q '/mnt/data_verify' /etc/fstab
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Test state=absent unmounts and removes fstab entry while preserving disk data
+      ansible.builtin.include_role:
+        name: hifra01.utils.disk_mount
+      vars:
+        disk_mount_disks:
+          - device: "{{ molecule_loop_disk4 }}"
+            path: "/mnt/data_verify"
+            state: "absent"
+
+    - name: Verify /mnt/data_verify is unmounted, removed from fstab, and directory remains
+      ansible.builtin.shell: |
+        set -euo pipefail
+        ! findmnt -rn -M /mnt/data_verify >/dev/null 2>&1
+        ! grep -q '/mnt/data_verify' /etc/fstab
+        test -d /mnt/data_verify
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Test safety guard rejects mismatched filesystem with force=false
+      block:
+        - name: Reset guard flag
+          ansible.builtin.set_fact:
+            _verify_guard_triggered: false
+
+        - name: Attempt mismatched fstype=xfs on ext4 partition with force=false
+          ansible.builtin.include_role:
+            name: hifra01.utils.disk_mount
+          vars:
+            disk_mount_disks:
+              - device: "{{ molecule_loop_disk4 }}"
+                path: "/mnt/data_verify"
+                fstype: "xfs"
+                force: false
+      rescue:
+        - name: Record mismatched filesystem guard failure
+          ansible.builtin.set_fact:
+            _verify_guard_triggered: true
+
+    - name: Assert mismatched filesystem was rejected
+      ansible.builtin.assert:
+        that:
+          - _verify_guard_triggered | bool
+
+    - name: Test safety guard rejects conflicting partition_table with force=false
+      block:
+        - name: Reset guard flag
+          ansible.builtin.set_fact:
+            _verify_guard_triggered: false
+
+        - name: Attempt msdos partition_table on GPT disk with force=false
+          ansible.builtin.include_role:
+            name: hifra01.utils.disk_mount
+          vars:
+            disk_mount_disks:
+              - device: "{{ molecule_loop_disk4 }}"
+                path: "/mnt/data_verify"
+                partition_table: "msdos"
+                fstype: "ext4"
+                force: false
+      rescue:
+        - name: Record conflicting partition table guard failure
+          ansible.builtin.set_fact:
+            _verify_guard_triggered: true
+
+    - name: Assert conflicting partition_table was rejected
+      ansible.builtin.assert:
+        that:
+          - _verify_guard_triggered | bool
+
+    - name: Test safety guard rejects partition device when partition=true
+      block:
+        - name: Reset guard flag
+          ansible.builtin.set_fact:
+            _verify_guard_triggered: false
+
+        - name: Attempt partitioning a partition device directly
+          ansible.builtin.include_role:
+            name: hifra01.utils.disk_mount
+          vars:
+            disk_mount_disks:
+              - device: "{{ molecule_loop_disk4 }}p1"
+                path: "/mnt/data_verify"
+                partition: true
+                fstype: "ext4"
+      rescue:
+        - name: Record partition-device guard failure
+          ansible.builtin.set_fact:
+            _verify_guard_triggered: true
+
+    - name: Assert partition device with partition=true was rejected
+      ansible.builtin.assert:
+        that:
+          - _verify_guard_triggered | bool
+
+    - name: Test safety guard rejects partitioning whole-disk filesystem when force=false
+      block:
+        - name: Reset guard flag
+          ansible.builtin.set_fact:
+            _verify_guard_triggered: false
+
+        - name: Attempt partitioning Disk 3 whole-disk ext4 filesystem with force=false
+          ansible.builtin.include_role:
+            name: hifra01.utils.disk_mount
+          vars:
+            disk_mount_disks:
+              - device: "{{ molecule_loop_disk3 }}"
+                path: "/mnt/data_whole_guard"
+                partition: true
+                fstype: "ext4"
+                force: false
+      rescue:
+        - name: Record whole-disk filesystem guard failure
+          ansible.builtin.set_fact:
+            _verify_guard_triggered: true
+
+    - name: Assert whole-disk filesystem overwrite was rejected
+      ansible.builtin.assert:
+        that:
+          - _verify_guard_triggered | bool
+
+    - name: Create non-empty directory fixture for allow_non_empty guard test
+      ansible.builtin.file:
+        path: /mnt/data_nonempty
+        state: directory
+        mode: '0755'
+
+    - name: Create pre-existing file inside /mnt/data_nonempty
+      ansible.builtin.copy:
+        dest: /mnt/data_nonempty/existing.txt
+        content: "do-not-shadow\n"
+        mode: '0644'
+
+    - name: Test safety guard rejects mounting over non-empty directory with allow_non_empty=false
+      block:
+        - name: Reset guard flag
+          ansible.builtin.set_fact:
+            _verify_guard_triggered: false
+
+        - name: Attempt mounting Disk 4 onto non-empty /mnt/data_nonempty
+          ansible.builtin.include_role:
+            name: hifra01.utils.disk_mount
+          vars:
+            disk_mount_disks:
+              - device: "{{ molecule_loop_disk4 }}"
+                path: "/mnt/data_nonempty"
+                fstype: "ext4"
+                allow_non_empty: false
+      rescue:
+        - name: Record non-empty directory guard failure
+          ansible.builtin.set_fact:
+            _verify_guard_triggered: true
+
+    - name: Assert non-empty directory mount was rejected and not mounted
+      ansible.builtin.shell: |
+        set -euo pipefail
+        ! findmnt -rn -M /mnt/data_nonempty >/dev/null 2>&1
+        test -f /mnt/data_nonempty/existing.txt
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Assert non-empty guard flag was triggered
+      ansible.builtin.assert:
+        that:
+          - _verify_guard_triggered | bool
+
+    - name: Test pre-flight validation rejects invalid inputs
+      block:
+        - name: Reset guard flag
+          ansible.builtin.set_fact:
+            _verify_guard_triggered: false
+
+        - name: Attempt protected mount path /
+          ansible.builtin.include_role:
+            name: hifra01.utils.disk_mount
+          vars:
+            disk_mount_disks:
+              - device: "{{ molecule_loop_disk4 }}"
+                path: "/"
+      rescue:
+        - name: Record protected path validation failure
+          ansible.builtin.set_fact:
+            _verify_guard_triggered: true
+
+    - name: Assert protected path validation rejected /
+      ansible.builtin.assert:
+        that:
+          - _verify_guard_triggered | bool
+
+    - name: Test pre-flight validation rejects state=present with auto_mount=false
+      block:
+        - name: Reset guard flag
+          ansible.builtin.set_fact:
+            _verify_guard_triggered: false
+
+        - name: Attempt state=present with auto_mount=false
+          ansible.builtin.include_role:
+            name: hifra01.utils.disk_mount
+          vars:
+            disk_mount_disks:
+              - device: "{{ molecule_loop_disk4 }}"
+                path: "/mnt/data_invalid"
+                state: "present"
+                auto_mount: false
+      rescue:
+        - name: Record contradictory state/auto_mount validation failure
+          ansible.builtin.set_fact:
+            _verify_guard_triggered: true
+
+    - name: Assert state=present with auto_mount=false was rejected
+      ansible.builtin.assert:
+        that:
+          - _verify_guard_triggered | bool
+
+    - name: Remount Disk 4 cleanly to confirm original marker file was never destroyed
+      ansible.builtin.include_role:
+        name: hifra01.utils.disk_mount
+      vars:
+        disk_mount_disks:
+          - device: "{{ molecule_loop_disk4 }}"
+            path: "/mnt/data_verify"
+            fstype: "ext4"
+            auto_mount: false
+
+    - name: Read Disk 4 marker file after all safety and lifecycle tests
+      ansible.builtin.slurp:
+        src: /mnt/data_verify/keep.txt
+      register: _verify_disk4_marker
+
+    - name: Assert Disk 4 data remained intact
+      ansible.builtin.assert:
+        that:
+          - (_verify_disk4_marker.content | b64decode | trim) == 'must-not-be-lost'

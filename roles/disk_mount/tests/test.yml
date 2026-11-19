@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: MIT-0
+---
+- name: Test disk_mount role
+  hosts: localhost
+  remote_user: root
+  roles:
+    - hifra01.utils.disk_mount

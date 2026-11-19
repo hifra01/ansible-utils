@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: MIT-0
+---
+# Per-disk orchestration dispatcher for disk_mount
+
+- name: Provision and mount active disk entry
+  when: _disk_mount_entry.state in ['mounted', 'present']
+  block:
+    - name: Inspect configured block device
+      ansible.builtin.stat:
+        path: "{{ _disk_mount_entry.device }}"
+      register: _disk_mount_device_stat
+
+    - name: Assert configured device exists and is a block device
+      ansible.builtin.assert:
+        that:
+          - _disk_mount_device_stat.stat.exists
+          - _disk_mount_device_stat.stat.isblk
+        fail_msg: >-
+          Configured device {{ _disk_mount_entry.device }} does not exist or is not a block device.
+
+    - name: Manage partition table and partition when partitioning is enabled
+      ansible.builtin.include_tasks: partition.yml
+      when: _disk_mount_entry.partition | bool
+
+    - name: Inspect and format target block device
+      ansible.builtin.include_tasks: format.yml
+
+    - name: Manage mount point, fstab persistence, and mount state
+      ansible.builtin.include_tasks: mount.yml
+
+- name: Manage unmount or absent lifecycle for inactive disk entry
+  ansible.builtin.include_tasks: mount.yml
+  when: _disk_mount_entry.state in ['unmounted', 'absent']

@@ -1,0 +1,195 @@
+# SPDX-License-Identifier: MIT-0
+---
+# Mount management, fstab persistence, and lifecycle tasks for disk_mount
+
+- name: Manage active mount and persistent fstab configuration
+  when: _disk_mount_entry.state in ['mounted', 'present']
+  block:
+    - name: Resolve persistent fstab source identifier via blkid
+      when:
+        - (_disk_mount_entry.state == 'mounted' and (_disk_mount_entry.auto_mount | bool)) or (_disk_mount_entry.state == 'present')
+        - _disk_mount_entry.fstab_src_type != 'device'
+      block:
+        - name: Query block identifier for persistent fstab entry
+          ansible.builtin.command: >-
+            blkid -o value -s {{ _disk_mount_entry.fstab_src_type | upper }}
+            {{ _disk_mount_entry.target_device | quote }}
+          register: _disk_mount_blkid_src
+          changed_when: false
+          failed_when: _disk_mount_blkid_src.rc not in [0, 2]
+
+        - name: Assert block identifier resolved to a non-empty value
+          ansible.builtin.assert:
+            that:
+              - (_disk_mount_blkid_src.stdout | trim | length) > 0
+            fail_msg: >-
+              Could not resolve {{ _disk_mount_entry.fstab_src_type | upper }} for
+              {{ _disk_mount_entry.target_device }} via blkid. Verify the device has a valid
+              {{ _disk_mount_entry.fstab_src_type }} identifier.
+
+        - name: Set persistent fstab source from blkid identifier
+          ansible.builtin.set_fact:
+            _disk_mount_fstab_src: "{{ _disk_mount_entry.fstab_src_type | upper }}={{ _disk_mount_blkid_src.stdout | trim }}"
+
+    - name: Set persistent fstab source directly to target device path
+      ansible.builtin.set_fact:
+        _disk_mount_fstab_src: "{{ _disk_mount_entry.target_device }}"
+      when:
+        - (_disk_mount_entry.state == 'mounted' and (_disk_mount_entry.auto_mount | bool)) or (_disk_mount_entry.state == 'present')
+        - _disk_mount_entry.fstab_src_type == 'device'
+
+    - name: Check whether target mount path is currently mounted
+      ansible.builtin.command: "findmnt -rn -o SOURCE -M {{ _disk_mount_entry.path | quote }}"
+      register: _disk_mount_current_src
+      changed_when: false
+      failed_when: false
+
+    - name: Set current mount status fact
+      ansible.builtin.set_fact:
+        _disk_mount_is_mounted: "{{ (_disk_mount_current_src.rc == 0) and ((_disk_mount_current_src.stdout | trim | length) > 0) }}"
+
+    - name: Inspect target mount path before mounting
+      ansible.builtin.stat:
+        path: "{{ _disk_mount_entry.path }}"
+      register: _disk_mount_path_stat
+      when: _disk_mount_entry.state == 'mounted'
+
+    - name: Assert target mount path is not a non-directory file
+      ansible.builtin.assert:
+        that:
+          - not _disk_mount_path_stat.stat.exists or _disk_mount_path_stat.stat.isdir
+        fail_msg: >-
+          Target mount path {{ _disk_mount_entry.path }} already exists and is not a directory.
+      when: _disk_mount_entry.state == 'mounted'
+
+    - name: Check for pre-existing contents in unmounted target mount directory
+      ansible.builtin.find:
+        paths: "{{ _disk_mount_entry.path }}"
+        file_type: any
+        hidden: true
+        recurse: false
+      register: _disk_mount_dir_contents
+      when:
+        - _disk_mount_entry.state == 'mounted'
+        - not _disk_mount_is_mounted
+        - not (_disk_mount_entry.allow_non_empty | bool)
+        - _disk_mount_path_stat.stat.exists
+        - _disk_mount_path_stat.stat.isdir
+
+    - name: Fail fast when unmounted target mount directory is non-empty and allow_non_empty is false
+      ansible.builtin.assert:
+        that:
+          - _disk_mount_dir_contents.matched | int == 0
+        fail_msg: >-
+          Safety check blocked mounting over non-empty directory {{ _disk_mount_entry.path }}
+          ({{ _disk_mount_dir_contents.matched }} item(s) found). Empty the directory or set allow_non_empty: true.
+      when:
+        - _disk_mount_entry.state == 'mounted'
+        - not _disk_mount_is_mounted
+        - not (_disk_mount_entry.allow_non_empty | bool)
+        - _disk_mount_path_stat.stat.exists
+        - _disk_mount_path_stat.stat.isdir
+
+    - name: Ensure target mount point directory exists
+      ansible.builtin.file:
+        path: "{{ _disk_mount_entry.path }}"
+        state: directory
+
+    - name: Mount filesystem and persist fstab entry
+      ansible.posix.mount:
+        path: "{{ _disk_mount_entry.path }}"
+        src: "{{ _disk_mount_fstab_src }}"
+        fstype: "{{ _disk_mount_entry.fstype }}"
+        opts: "{{ _disk_mount_entry.opts }}"
+        dump: "{{ _disk_mount_entry.dump }}"
+        passno: "{{ _disk_mount_entry.passno }}"
+        fstab: "{{ disk_mount_fstab_path }}"
+        backup: "{{ disk_mount_backup_fstab }}"
+        state: mounted
+      notify: "reload systemd daemon"
+      when:
+        - _disk_mount_entry.state == 'mounted'
+        - _disk_mount_entry.auto_mount | bool
+
+    - name: Manage ephemeral non-persistent mount
+      when:
+        - _disk_mount_entry.state == 'mounted'
+        - not (_disk_mount_entry.auto_mount | bool)
+      block:
+        - name: Ensure ephemeral mount has no persistent fstab entry
+          ansible.posix.mount:
+            path: "{{ _disk_mount_entry.path }}"
+            fstab: "{{ disk_mount_fstab_path }}"
+            backup: "{{ disk_mount_backup_fstab }}"
+            state: absent_from_fstab
+          notify: "reload systemd daemon"
+
+        - name: Resolve canonical device paths for ephemeral mount idempotency check
+          ansible.builtin.command: "readlink -f {{ _disk_mount_real_item | quote }}"
+          register: _disk_mount_ephemeral_realpaths
+          changed_when: false
+          loop:
+            - "{{ _disk_mount_current_src.stdout | trim }}"
+            - "{{ _disk_mount_entry.target_device }}"
+          loop_control:
+            loop_var: _disk_mount_real_item
+          when: _disk_mount_is_mounted
+
+        - name: Mount filesystem ephemerally without fstab entry
+          ansible.posix.mount:
+            path: "{{ _disk_mount_entry.path }}"
+            src: "{{ _disk_mount_entry.target_device }}"
+            fstype: "{{ _disk_mount_entry.fstype }}"
+            opts: "{{ _disk_mount_entry.opts }}"
+            state: ephemeral
+          when: >-
+            not _disk_mount_is_mounted or
+            (_disk_mount_ephemeral_realpaths.results[0].stdout | trim) !=
+            (_disk_mount_ephemeral_realpaths.results[1].stdout | trim)
+
+    - name: Persist fstab entry without mounting immediately
+      ansible.posix.mount:
+        path: "{{ _disk_mount_entry.path }}"
+        src: "{{ _disk_mount_fstab_src }}"
+        fstype: "{{ _disk_mount_entry.fstype }}"
+        opts: "{{ _disk_mount_entry.opts }}"
+        dump: "{{ _disk_mount_entry.dump }}"
+        passno: "{{ _disk_mount_entry.passno }}"
+        fstab: "{{ disk_mount_fstab_path }}"
+        backup: "{{ disk_mount_backup_fstab }}"
+        state: present
+      notify: "reload systemd daemon"
+      when: _disk_mount_entry.state == 'present'
+
+    - name: Apply configured ownership and permissions to mounted directory
+      ansible.builtin.file:
+        path: "{{ _disk_mount_entry.path }}"
+        state: directory
+        owner: "{{ _disk_mount_entry.owner if (_disk_mount_entry.owner | length > 0) else omit }}"
+        group: "{{ _disk_mount_entry.group if (_disk_mount_entry.group | length > 0) else omit }}"
+        mode: "{{ _disk_mount_entry.mode if (_disk_mount_entry.mode | length > 0) else omit }}"
+      when:
+        - _disk_mount_entry.state == 'mounted'
+        - (_disk_mount_entry.owner | length > 0) or (_disk_mount_entry.group | length > 0) or (_disk_mount_entry.mode | length > 0)
+
+- name: Unmount filesystem while preserving fstab entry and disk data
+  ansible.posix.mount:
+    path: "{{ _disk_mount_entry.path }}"
+    state: unmounted
+  when: _disk_mount_entry.state == 'unmounted'
+
+- name: Unmount filesystem and remove persistent fstab entry
+  when: _disk_mount_entry.state == 'absent'
+  block:
+    - name: Unmount filesystem prior to removing fstab entry
+      ansible.posix.mount:
+        path: "{{ _disk_mount_entry.path }}"
+        state: unmounted
+
+    - name: Remove persistent fstab entry while preserving mount directory and disk data
+      ansible.posix.mount:
+        path: "{{ _disk_mount_entry.path }}"
+        fstab: "{{ disk_mount_fstab_path }}"
+        backup: "{{ disk_mount_backup_fstab }}"
+        state: absent_from_fstab
+      notify: "reload systemd daemon"
