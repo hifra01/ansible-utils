@@ -1,3 +1,17 @@
+<!--
+Sync Impact Report
+- Version change: 1.1.0 → 1.2.0
+- Modified principles:
+  - V. Linter & Multi-Distro Molecule Verification (NON-NEGOTIABLE): added Ubuntu 26.04, Debian 13, and Rocky Linux 10 to supported CI matrix test OSes
+- Added sections: None
+- Removed sections: None
+- Alignment notes (read-only observations; not modified by constitution command):
+  - AGENTS.md: update Testing (Molecule) distro table and CI matrix documentation
+  - .github/workflows/ci.yml: add Ubuntu 26.04, Debian 13, and Rocky Linux 10 to molecule matrix
+  - test-matrix.sh: add Ubuntu 26.04, Debian 13, and Rocky Linux 10 distro entries
+- Follow-up TODOs: None
+-->
+
 # hifra01.utils Ansible Collection Constitution
 
 ## Core Principles
@@ -49,10 +63,10 @@ from an existing role's baseline `molecule.yml`, `prepare.yml` with the RHEL 8 P
 bootstrap, `converge.yml` using the role FQCN `hifra01.utils.<role>`, and `verify.yml` asserting
 real system state such as services, files, ports, and command output). When testing a role,
 `molecule test` MUST be executed sequentially across all supported CI matrix images (Ubuntu
-22.04, Ubuntu 24.04, Debian 12, Rocky Linux 9, Rocky Linux 8) unless the user explicitly scopes
-a run to a single distribution. Rationale: multi-distro container verification is the only
-reliable proof that packaging, systemd units, and Python interpreters work across target OS
-families.
+22.04, Ubuntu 24.04, Ubuntu 26.04, Debian 12, Debian 13, Rocky Linux 10, Rocky Linux 9, Rocky
+Linux 8) unless the user explicitly scopes a run to a single distribution. Rationale: multi-distro
+container verification is the only reliable proof that packaging, systemd units, and Python
+interpreters work across target OS families.
 
 ## Technical Stack & Collection Constraints
 
@@ -99,4 +113,4 @@ Sync Impact Report, and versioned according to Semantic Versioning:
 - **MINOR**: Addition of a new Core Principle, section, or materially expanded governance rule.
 - **PATCH**: Wording clarifications, typo fixes, or non-semantic refinements.
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-17 | **Last Amended**: 2026-11-01
+**Version**: 1.2.0 | **Ratified**: 2026-10-17 | **Last Amended**: 2026-11-19
