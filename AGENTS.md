@@ -71,6 +71,7 @@ and respect `.specify/memory/constitution.md` as the governing project principle
 | `apt_mirror` | Override APT mirrors (legacy `.list` and DEB822 `.sources`) | Debian only |
 | `consul` | HashiCorp Consul (server/client mode, advertised services) | Debian, RedHat |
 | `datetime` | Install `tzdata`, set timezone (`datetime_tz`) | Debian, RedHat, Alpine, Archlinux |
+| `disk_mount` | Partition, format, and persistently mount block devices via `/etc/fstab` | Debian, RedHat |
 | `docker` | Docker CE/EE repo, install, `daemon.json`, docker group users, Compose stacks (`/srv/<name>`) | Debian, RedHat |
 | `fluentbit` | Fluent Bit log processor (Laravel multiline, Nginx access/error, systemd, Graylog/Loki) | Debian, RedHat |
 | `frankenphp` | FrankenPHP application server (Caddy + PHP-ZTS, extensions, Caddyfile, Laravel Octane) | Debian, RedHat |

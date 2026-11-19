@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: MIT-0
+---
+# defaults file for disk_mount
+
+# List of disks/partitions to partition, format, and mount.
+# Empty by default so invoking the role without explicit disk definitions is a safe no-op.
+disk_mount_disks: []
+
+# Default filesystem type when not specified on an individual disk entry.
+# Supported values: ext4, xfs, btrfs, ext3, vfat
+disk_mount_default_fstype: "ext4"
+
+# Whether to create/manage a partition table and partition on the target block device by default.
+# Set to false on an entry (or globally) to format a whole disk or an already-partitioned block device directly.
+disk_mount_default_partition: true
+
+# Default partition table format when partition is true.
+# Supported values: gpt, msdos
+disk_mount_default_partition_table: "gpt"
+
+# Default auto-mount behavior across server restarts (persists entry in /etc/fstab).
+# When false with state: "mounted", mounts ephemerally for the current session only.
+disk_mount_default_auto_mount: true
+
+# Default mount options string written to /etc/fstab and used when mounting.
+# Includes nofail so missing secondary disks do not block server boot.
+disk_mount_default_opts: "defaults,nofail"
+
+# Default device identifier written to /etc/fstab for persistent auto-mount.
+# Supported values: uuid, partuuid, label, device
+disk_mount_default_fstab_src_type: "uuid"
+
+# Whether mounting over an existing, unmounted, non-empty directory is permitted by default.
+# Keep false to fail fast and avoid silently shadowing pre-existing files.
+disk_mount_default_allow_non_empty: false
+
+# Path to the fstab file managed for persistent mounts.
+disk_mount_fstab_path: "/etc/fstab"
+
+# Whether to create a timestamped backup of fstab before modifying it.
+disk_mount_backup_fstab: true

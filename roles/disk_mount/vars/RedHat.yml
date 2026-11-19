@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: MIT-0
+---
+# vars file for disk_mount (RedHat family)
+
+disk_mount_base_packages:
+  - parted
+  - util-linux
+  - e2fsprogs
+
+disk_mount_fs_packages:
+  ext4:
+    - e2fsprogs
+  ext3:
+    - e2fsprogs
+  xfs:
+    - xfsprogs
+  btrfs:
+    - btrfs-progs
+  vfat:
+    - dosfstools
+
+disk_mount_label_flags:
+  ext4: "-L"
+  ext3: "-L"
+  xfs: "-L"
+  btrfs: "-L"
+  vfat: "-n"

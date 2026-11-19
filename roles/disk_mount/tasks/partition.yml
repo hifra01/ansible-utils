@@ -1,0 +1,151 @@
+# SPDX-License-Identifier: MIT-0
+---
+# Partitioning and safety inspection tasks for disk_mount
+
+- name: Inspect block device type via lsblk
+  ansible.builtin.command: "lsblk -dn -o TYPE {{ _disk_mount_entry.device | quote }}"
+  register: _disk_mount_lsblk_type
+  changed_when: false
+
+- name: Reject partition device when partition management is enabled
+  ansible.builtin.assert:
+    that:
+      - (_disk_mount_lsblk_type.stdout | trim) != 'part'
+    fail_msg: >-
+      Device {{ _disk_mount_entry.device }} is already a partition ('part').
+      Set partition: false to format/mount this partition directly, or specify the parent whole-disk device.
+
+- name: Inspect existing partition table type on block device
+  ansible.builtin.command: "blkid -o value -s PTTYPE {{ _disk_mount_entry.device | quote }}"
+  register: _disk_mount_pttype_cmd
+  changed_when: false
+  failed_when: _disk_mount_pttype_cmd.rc not in [0, 2]
+
+- name: Inspect existing whole-disk filesystem signature on block device
+  ansible.builtin.command: "blkid -o value -s TYPE {{ _disk_mount_entry.device | quote }}"
+  register: _disk_mount_whole_fstype_cmd
+  changed_when: false
+  failed_when: _disk_mount_whole_fstype_cmd.rc not in [0, 2]
+
+- name: Evaluate partition table and whole-disk filesystem conflicts
+  ansible.builtin.set_fact:
+    _disk_mount_detected_pttype: "{{ 'msdos' if (_disk_mount_pttype_cmd.stdout | trim) == 'dos' else (_disk_mount_pttype_cmd.stdout | trim) }}"
+    _disk_mount_detected_whole_fs: "{{ _disk_mount_whole_fstype_cmd.stdout | trim }}"
+    _disk_mount_has_whole_fs: "{{ (_disk_mount_whole_fstype_cmd.stdout | trim | length) > 0 }}"
+    _disk_mount_has_pt_conflict: >-
+      {{
+        ((_disk_mount_pttype_cmd.stdout | trim | length) > 0) and
+        (('msdos' if (_disk_mount_pttype_cmd.stdout | trim) == 'dos' else (_disk_mount_pttype_cmd.stdout | trim)) != _disk_mount_entry.partition_table)
+      }}
+
+- name: Fail fast on conflicting partition table or whole-disk filesystem when force is false
+  ansible.builtin.assert:
+    that:
+      - not _disk_mount_has_whole_fs
+      - not _disk_mount_has_pt_conflict
+    fail_msg: >-
+      Safety check blocked partitioning on {{ _disk_mount_entry.device }}:
+      detected whole-disk filesystem '{{ _disk_mount_detected_whole_fs | default('none', true) }}'
+      and partition table '{{ _disk_mount_detected_pttype | default('none', true) }}'
+      (requested '{{ _disk_mount_entry.partition_table }}').
+      Set force: true to wipe existing disk metadata and recreate the partition table.
+  when: not (_disk_mount_entry.force | bool)
+
+- name: Unmount active mounts and wipe conflicting signatures when force is true
+  when:
+    - _disk_mount_entry.force | bool
+    - _disk_mount_has_whole_fs or _disk_mount_has_pt_conflict
+  block:
+    - name: Unmount active targets on block device and child partitions prior to wipe
+      ansible.builtin.shell: |
+        set -euo pipefail
+        dev={{ _disk_mount_entry.device | quote }}
+        mapfile -t targets < <(
+          findmnt -rn -o SOURCE,TARGET \
+            | awk -v d="$dev" '$1 == d || (index($1, d) == 1 && substr($1, length(d)+1, 1) ~ /^[0-9p]$/) {print $2}' \
+            | tac
+        )
+        for mp in "${targets[@]}"; do
+          [ -n "$mp" ] && umount "$mp"
+        done
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Wipe conflicting partition table or whole-disk filesystem signatures
+      ansible.builtin.command: "wipefs -a {{ _disk_mount_entry.device | quote }}"
+      changed_when: true
+
+- name: Ensure requested partition exists on block device
+  community.general.parted:
+    device: "{{ _disk_mount_entry.device }}"
+    label: "{{ _disk_mount_entry.partition_table }}"
+    number: "{{ _disk_mount_entry.partition_number }}"
+    part_start: "{{ _disk_mount_entry.partition_start }}"
+    part_end: "{{ _disk_mount_entry.partition_end }}"
+    align: "{{ _disk_mount_entry.partition_align }}"
+    name: "{{ _disk_mount_entry.partition_name if (_disk_mount_entry.partition_table == 'gpt' and _disk_mount_entry.partition_name | length > 0) else omit }}"
+    flags: "{{ _disk_mount_entry.partition_flags if (_disk_mount_entry.partition_flags | length > 0) else omit }}"
+    state: present
+  register: _disk_mount_parted_result
+
+- name: Check whether resolved partition device node already exists
+  ansible.builtin.stat:
+    path: "{{ _disk_mount_entry.target_device }}"
+  register: _disk_mount_target_part_stat
+
+- name: Refresh kernel partition table and ensure partition device node exists
+  when: _disk_mount_parted_result is changed or not _disk_mount_target_part_stat.stat.exists
+  block:
+    - name: Refresh kernel partition table when sysfs partition entry is missing
+      ansible.builtin.shell: |
+        set -euo pipefail
+        dev={{ _disk_mount_entry.device | quote }}
+        target={{ _disk_mount_entry.target_device | quote }}
+        part_name="$(basename "$target")"
+        if [ ! -r "/sys/class/block/${part_name}/dev" ]; then
+          partprobe "$dev" 2>/dev/null || partx -u "$dev" 2>/dev/null || true
+        fi
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Wait for udev event queue to settle when udev is active
+      ansible.builtin.shell: |
+        set -euo pipefail
+        if [ -e /run/udev/control ] && command -v udevadm >/dev/null 2>&1; then
+          udevadm settle --timeout=10
+        fi
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Ensure partition device node exists with matching kernel major and minor numbers
+      ansible.builtin.shell: |
+        set -euo pipefail
+        target={{ _disk_mount_entry.target_device | quote }}
+        part_name="$(basename "$target")"
+        sys_dev="/sys/class/block/${part_name}/dev"
+        if [ -r "$sys_dev" ]; then
+          IFS=':' read -r major minor < "$sys_dev"
+          if [ ! -b "$target" ] || [ "$(stat -c '%Hr:%Lr' "$target" 2>/dev/null || true)" != "${major}:${minor}" ]; then
+            rm -f "$target"
+            mknod -m 0660 "$target" b "$major" "$minor"
+          fi
+        fi
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+- name: Verify resolved partition block device node is available
+  ansible.builtin.stat:
+    path: "{{ _disk_mount_entry.target_device }}"
+  register: _disk_mount_target_part_verify
+
+- name: Assert resolved partition block device node exists
+  ansible.builtin.assert:
+    that:
+      - _disk_mount_target_part_verify.stat.exists
+      - _disk_mount_target_part_verify.stat.isblk
+    fail_msg: >-
+      Expected partition device {{ _disk_mount_entry.target_device }} was not found as a block device after partitioning.

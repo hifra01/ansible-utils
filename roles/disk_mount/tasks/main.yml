@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: MIT-0
+---
+# tasks file for disk_mount
+
+- name: Validate supported platform
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] in ['Debian', 'RedHat']
+    fail_msg: "This role only supports Debian and RedHat family systems."
+
+- name: Load OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_facts['os_family'] }}.yml"
+
+- name: Validate and normalize disk_mount configuration
+  ansible.builtin.include_tasks: validate.yml
+
+- name: Manage packages and process configured disks
+  when: _disk_mount_entries | length > 0
+  block:
+    - name: Install required storage packages for active disk entries
+      ansible.builtin.include_tasks: packages.yml
+      when: (_disk_mount_entries | selectattr('state', 'in', ['mounted', 'present']) | list | length) > 0
+
+    - name: Process each configured disk mount entry
+      ansible.builtin.include_tasks: process-disk.yml
+      loop: "{{ _disk_mount_entries }}"
+      loop_control:
+        loop_var: _disk_mount_entry
