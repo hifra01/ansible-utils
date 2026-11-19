@@ -199,7 +199,10 @@ When asked to test a role with Molecule, **always run `molecule test` against al
 |---|---|---|
 | Ubuntu 22.04 | `ubuntu2204` (`u22`) | `geerlingguy/docker-ubuntu2204-ansible:latest` |
 | Ubuntu 24.04 | `ubuntu2404` (`u24`) | `geerlingguy/docker-ubuntu2404-ansible:latest` |
+| Ubuntu 26.04 | `ubuntu2604` (`u26`) | `geerlingguy/docker-ubuntu2604-ansible:latest` |
 | Debian 12 | `debian12` (`deb12`) | `geerlingguy/docker-debian12-ansible:latest` |
+| Debian 13 | `debian13` (`deb13`) | `geerlingguy/docker-debian13-ansible:latest` |
+| Rocky Linux 10 | `rockylinux10` (`el10`, `rocky10`) | `geerlingguy/docker-rockylinux10-ansible:latest` |
 | Rocky Linux 9 | `rockylinux9` (`el9`, `rocky9`) | `geerlingguy/docker-rockylinux9-ansible:latest` |
 | Rocky Linux 8 | `rockylinux8` (`el8`, `rocky8`) | `geerlingguy/docker-rockylinux8-ansible:latest` |
 
@@ -214,7 +217,7 @@ When asked to test a role with Molecule, **always run `molecule test` against al
   ```
 - Don't stop at the first failure — run every distro, then report a pass/fail summary per distro.
 - Skip only distros the role doesn't support, matching the CI `exclude` list
-  (e.g. `apt_mirror` → skip both Rocky images). `./test-matrix.sh` handles this automatically.
+  (e.g. `apt_mirror` → skip all Rocky images). `./test-matrix.sh` handles this automatically.
 - If the user names a single distro ("test on Rocky 9 only"), run only that image
   (e.g. `./test-matrix.sh -r <role> -o rockylinux9`).
 
@@ -242,8 +245,9 @@ When asked to test a role with Molecule, **always run `molecule test` against al
 
 - Triggers: push/PR to `main`, weekly cron (Sunday 00:00 UTC), manual dispatch.
 - `lint` job → `yamllint .` + `ansible-lint` (Python 3.14).
-- `molecule` job: matrix of role × {ubuntu2204, ubuntu2404, debian12, rockylinux9, rockylinux8};
-  on push/PR only roles with changed files run (via `dorny/paths-filter`); scheduled/manual runs test all.
+- `molecule` job: matrix of role × {ubuntu2204, ubuntu2404, ubuntu2604, debian12, debian13,
+  rockylinux10, rockylinux9, rockylinux8}; on push/PR only roles with changed files run (via
+  `dorny/paths-filter`); scheduled/manual runs test all.
 - `apt_mirror` is excluded from Rocky distros.
 
 ## Adding a New Role — Checklist
@@ -264,7 +268,7 @@ When asked to test a role with Molecule, **always run `molecule test` against al
    `detect-changes.outputs`, the `paths-filter` `filters`, `molecule.strategy.matrix.role`,
    and the `case` statement in the "Check if this role should be tested" step.
    Add `exclude` entries for unsupported distros.
-7. Run `yamllint .`, `ansible-lint`, and `molecule test` on all five distro images (minus unsupported ones),
+7. Run `yamllint .`, `ansible-lint`, and `molecule test` on all eight distro images (minus unsupported ones),
    marking completed tasks in `specs/<NNN-feature>/tasks.md`.
 
 ## Git Workflow

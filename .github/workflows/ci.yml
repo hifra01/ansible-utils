@@ -125,7 +125,10 @@ jobs:
         distro:
           - ubuntu2204
           - ubuntu2404
+          - ubuntu2604
           - debian12
+          - debian13
+          - rockylinux10
           - rockylinux9
           - rockylinux8
         include:
@@ -133,14 +136,22 @@ jobs:
             image: geerlingguy/docker-ubuntu2204-ansible:latest
           - distro: ubuntu2404
             image: geerlingguy/docker-ubuntu2404-ansible:latest
+          - distro: ubuntu2604
+            image: geerlingguy/docker-ubuntu2604-ansible:latest
           - distro: debian12
             image: geerlingguy/docker-debian12-ansible:latest
+          - distro: debian13
+            image: geerlingguy/docker-debian13-ansible:latest
+          - distro: rockylinux10
+            image: geerlingguy/docker-rockylinux10-ansible:latest
           - distro: rockylinux9
             image: geerlingguy/docker-rockylinux9-ansible:latest
           - distro: rockylinux8
             image: geerlingguy/docker-rockylinux8-ansible:latest
         exclude:
           # apt_mirror only supports Debian/Ubuntu family
+          - role: apt_mirror
+            distro: rockylinux10
           - role: apt_mirror
             distro: rockylinux9
           - role: apt_mirror

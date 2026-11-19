@@ -40,7 +40,10 @@ fi
 ALL_DISTROS=(
   "ubuntu2204"
   "ubuntu2404"
+  "ubuntu2604"
   "debian12"
+  "debian13"
+  "rockylinux10"
   "rockylinux9"
   "rockylinux8"
 )
@@ -64,8 +67,14 @@ normalize_distro() {
       printf 'ubuntu2204' ;;
     ubuntu2404|ubuntu-24.04|ubuntu24|u24|noble)
       printf 'ubuntu2404' ;;
+    ubuntu2604|ubuntu-26.04|ubuntu26|u26|resolute)
+      printf 'ubuntu2604' ;;
     debian12|debian-12|deb12|d12|bookworm)
       printf 'debian12' ;;
+    debian13|debian-13|deb13|d13|trixie)
+      printf 'debian13' ;;
+    rockylinux10|rocky10|rocky-10|rhel10|el10|rl10)
+      printf 'rockylinux10' ;;
     rockylinux9|rocky9|rocky-9|rhel9|el9|rl9)
       printf 'rockylinux9' ;;
     rockylinux8|rocky8|rocky-8|rhel8|el8|rl8)
@@ -78,11 +87,14 @@ normalize_distro() {
 # Map canonical distro key -> container image
 distro_image() {
   case "$1" in
-    ubuntu2204)  printf 'geerlingguy/docker-ubuntu2204-ansible:latest' ;;
-    ubuntu2404)  printf 'geerlingguy/docker-ubuntu2404-ansible:latest' ;;
-    debian12)    printf 'geerlingguy/docker-debian12-ansible:latest' ;;
-    rockylinux9) printf 'geerlingguy/docker-rockylinux9-ansible:latest' ;;
-    rockylinux8) printf 'geerlingguy/docker-rockylinux8-ansible:latest' ;;
+    ubuntu2204)   printf 'geerlingguy/docker-ubuntu2204-ansible:latest' ;;
+    ubuntu2404)   printf 'geerlingguy/docker-ubuntu2404-ansible:latest' ;;
+    ubuntu2604)   printf 'geerlingguy/docker-ubuntu2604-ansible:latest' ;;
+    debian12)     printf 'geerlingguy/docker-debian12-ansible:latest' ;;
+    debian13)     printf 'geerlingguy/docker-debian13-ansible:latest' ;;
+    rockylinux10) printf 'geerlingguy/docker-rockylinux10-ansible:latest' ;;
+    rockylinux9)  printf 'geerlingguy/docker-rockylinux9-ansible:latest' ;;
+    rockylinux8)  printf 'geerlingguy/docker-rockylinux8-ansible:latest' ;;
     *) return 1 ;;
   esac
 }
@@ -93,7 +105,7 @@ exclusion_reason() {
   local role="$1"
   local distro="$2"
   case "${role}:${distro}" in
-    apt_mirror:rockylinux9|apt_mirror:rockylinux8)
+    apt_mirror:rockylinux10|apt_mirror:rockylinux9|apt_mirror:rockylinux8)
       printf 'Debian/Ubuntu family only'
       return 0
       ;;
@@ -109,15 +121,16 @@ usage() {
 ${C_BOLD}Usage:${C_RESET} ./test-matrix.sh [OPTIONS]
 
 Run Molecule tests across roles and OS distributions in parallel.
-By default, tests all roles against all 5 CI distributions.
+By default, tests all roles against all 8 CI distributions.
 
 ${C_BOLD}Selection Options:${C_RESET}
   -r, --role <roles>       Role(s) to test (comma-separated or repeated flag).
                            Default: all roles under roles/.
   -o, --os <distros>       OS distro(s) to test (comma-separated or repeated flag).
-                           Supported: ubuntu2204, ubuntu2404, debian12, rockylinux9, rockylinux8
-                           Aliases:   u22, u24, deb12, el9/rocky9, el8/rocky8
-                           Default: all 5 distros.
+                           Supported: ubuntu2204, ubuntu2404, ubuntu2604, debian12, debian13,
+                                      rockylinux10, rockylinux9, rockylinux8
+                           Aliases:   u22, u24, u26, deb12, deb13, el10/rocky10, el9/rocky9, el8/rocky8
+                           Default: all 8 distros.
   -c, --changed            Only test roles with files modified relative to git main/HEAD.
 
 ${C_BOLD}Execution Options:${C_RESET}
