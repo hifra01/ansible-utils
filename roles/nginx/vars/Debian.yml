@@ -4,6 +4,7 @@ nginx_packages:
   - nginx-extras
   - cron
   - curl
+  - openssl
 nginx_config_dir: /etc/nginx
 nginx_site_available_dir: /etc/nginx/sites-available
 nginx_site_enabled_dir: /etc/nginx/sites-enabled

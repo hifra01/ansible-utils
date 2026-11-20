@@ -10,6 +10,38 @@
   ansible.builtin.include_tasks: "repo-{{ ansible_facts['os_family'] }}.yml"
   when: redis_install_repo | bool
 
+- name: Configure Remi Modular repository for Redis on RedHat 10+
+  ansible.builtin.yum_repository:
+    name: remi-modular
+    description: "Remi's Modular repository for Enterprise Linux {{ ansible_facts['distribution_major_version'] }} - $basearch"
+    baseurl: "{{ redis_remi_modular_repo_url }}"
+    gpgcheck: true
+    gpgkey: "{{ redis_remi_gpg_key_url }}"
+    enabled: true
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+    - ansible_facts['distribution_major_version'] | int >= 10
+    - not (redis_install_repo | bool)
+
+- name: Check enabled redis dnf module stream on RedHat 10+
+  ansible.builtin.command: dnf module list --enabled redis
+  register: _redis_dnf_module_status
+  changed_when: false
+  failed_when: false
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+    - ansible_facts['distribution_major_version'] | int >= 10
+    - not (redis_install_repo | bool)
+
+- name: Enable redis dnf module stream on RedHat 10+
+  ansible.builtin.command: "dnf module enable -y {{ redis_remi_module_stream }}"
+  changed_when: true
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+    - ansible_facts['distribution_major_version'] | int >= 10
+    - not (redis_install_repo | bool)
+    - "'remi-' not in (_redis_dnf_module_status.stdout | default(''))"
+
 - name: Install Redis package
   ansible.builtin.package:
     name: "{{ redis_package_name }}"

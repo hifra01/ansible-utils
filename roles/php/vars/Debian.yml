@@ -1,11 +1,15 @@
 ---
 # vars file for php (Debian family)
 
-php_pre_packages:
-  - apt-transport-https
-  - ca-certificates
-  - gnupg2
-  - software-properties-common
+php_pre_packages: >-
+  {{
+    ['apt-transport-https', 'ca-certificates', 'gnupg']
+    + (
+      ['software-properties-common']
+      if (ansible_distribution == 'Ubuntu' and ansible_distribution_version is version('26.04', '<'))
+      else []
+    )
+  }}
 
 php_package_pattern: "phpversion"
 php_fpm_package_pattern: "phpversion-fpm"

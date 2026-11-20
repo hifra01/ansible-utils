@@ -23,11 +23,14 @@
   ansible.builtin.stat:
     path: /etc/dnf/modules.d/mysql.module
   register: _percona_mysql_dnf_module_stat
+  when: ansible_facts['distribution_major_version'] | int < 10
 
 - name: Disable default DNF mysql module stream
   ansible.builtin.command:
     cmd: dnf -y module disable mysql
-  when: not _percona_mysql_dnf_module_stat.stat.exists
+  when:
+    - ansible_facts['distribution_major_version'] | int < 10
+    - not _percona_mysql_dnf_module_stat.stat.exists
   changed_when: true
 
 - name: Check if target Percona YUM/DNF repository is configured

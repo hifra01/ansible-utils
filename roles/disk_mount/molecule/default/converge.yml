@@ -29,7 +29,7 @@
             partition: true
             partition_table: "msdos"
             fstype: "xfs"
-            label: "XFS_DATA"
+            label: "XFS_{{ inventory_hostname | hash('md5') | truncate(8, true, '') | upper }}"
             fstab_src_type: "label"
             auto_mount: true
 

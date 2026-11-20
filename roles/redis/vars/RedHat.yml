@@ -22,3 +22,7 @@ redis_config_mode: '0640'
 
 redis_repo_rpm_url: https://packages.redis.io/rpm/rhel{{ ansible_distribution_major_version }}
 redis_repo_rpm_key_url: https://packages.redis.io/gpg
+
+redis_remi_modular_repo_url: "https://rpms.remirepo.net/enterprise/{{ ansible_facts['distribution_major_version'] }}/modular/$basearch/"
+redis_remi_gpg_key_url: "https://rpms.remirepo.net/enterprise/{{ ansible_facts['distribution_major_version'] }}/RPM-GPG-KEY-remi"
+redis_remi_module_stream: "redis:remi-7.2"
