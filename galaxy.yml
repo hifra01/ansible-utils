@@ -72,6 +72,12 @@ build_ignore:
     - ".github/**"
     - ".molecule-logs"
     - ".molecule-logs/**"
+    - ".agents"
+    - ".agents/**"
+    - ".specify"
+    - ".specify/**"
+    - "specs"
+    - "specs/**"
     - "test-matrix.sh"
     - "*.tar.gz"
 
