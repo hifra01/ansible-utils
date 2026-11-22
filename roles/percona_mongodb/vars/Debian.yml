@@ -20,3 +20,4 @@ percona_mongodb_db_path: "/var/lib/mongodb"
 percona_mongodb_log_path: "/var/log/mongodb/mongod.log"
 percona_mongodb_pid_file_path: "/var/run/mongod.pid"
 percona_mongodb_process_fork: true
+percona_mongodb_ubuntu_fallback_codename: "noble"

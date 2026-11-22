@@ -43,8 +43,48 @@
     - name: Run percona-release enable-only
       ansible.builtin.command:
         cmd: "percona-release enable-only {{ _percona_mongodb_repo_product }} release"
-      changed_when: true
+      register: _percona_mongodb_enable_cmd
+      failed_when: false
+      changed_when: _percona_mongodb_enable_cmd.rc == 0
+
+    - name: Assert percona-release enable-only succeeded or requires Ubuntu fallback
+      ansible.builtin.assert:
+        that:
+          - >-
+            _percona_mongodb_enable_cmd.rc == 0 or
+            (
+              ansible_facts['distribution'] == 'Ubuntu' and
+              ansible_facts['distribution_version'] is version('24.04', '>') and
+              'not supported for current operating system' in (_percona_mongodb_enable_cmd.stdout | default(''))
+            )
+        fail_msg: >-
+          percona-release enable-only {{ _percona_mongodb_repo_product }} release failed:
+          {{ _percona_mongodb_enable_cmd.stdout | default('') }} {{ _percona_mongodb_enable_cmd.stderr | default('') }}
+
+    - name: Configure fallback Percona APT repository for newer Ubuntu releases
+      when: _percona_mongodb_enable_cmd.rc != 0
+      block:
+        - name: Ensure default percona-original-release.list is absent for enable-only parity
+          ansible.builtin.file:
+            path: /etc/apt/sources.list.d/percona-original-release.list
+            state: absent
+
+        - name: Write fallback Percona APT repository file
+          vars:
+            _repo_base: "http://repo.percona.com/{{ _percona_mongodb_repo_product }}/apt"
+            _repo_opts: "[signed-by=/usr/share/keyrings/percona-keyring.gpg]"
+          ansible.builtin.copy:
+            dest: "/etc/apt/sources.list.d/percona-{{ _percona_mongodb_repo_product }}-release.list"
+            mode: '0644'
+            content: |
+              # Managed by Ansible hifra01.utils.percona_mongodb (fallback to {{ percona_mongodb_ubuntu_fallback_codename }})
+              deb {{ _repo_opts }} {{ _repo_base }} {{ percona_mongodb_ubuntu_fallback_codename }} main
+              deb-src {{ _repo_opts }} {{ _repo_base }} {{ percona_mongodb_ubuntu_fallback_codename }} main
 
     - name: Update apt cache after repository configuration
       ansible.builtin.apt:
         update_cache: true
+      register: _percona_mongodb_apt_update
+      retries: 3
+      delay: 5
+      until: _percona_mongodb_apt_update is succeeded

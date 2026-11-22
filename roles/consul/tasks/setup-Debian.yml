@@ -7,6 +7,11 @@
     name: "{{ consul_prerequisite_packages }}"
     state: present
     update_cache: true
+    cache_valid_time: 3600
+  register: _consul_debian_pre_pkgs
+  retries: 3
+  delay: 5
+  until: _consul_debian_pre_pkgs is succeeded
 
 - name: Ensure keyrings directory exists
   ansible.builtin.file:
@@ -29,3 +34,7 @@
     state: present
     filename: hashicorp
     update_cache: true
+  register: _consul_apt_repo
+  retries: 3
+  delay: 5
+  until: _consul_apt_repo is succeeded

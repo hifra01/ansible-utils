@@ -12,6 +12,10 @@
   ansible.builtin.apt:
     update_cache: true
     cache_valid_time: 3600
+  register: _datetime_apt_cache
+  retries: 3
+  delay: 5
+  until: _datetime_apt_cache is succeeded
   when: ansible_os_family == 'Debian'
 
 - name: Ensure package cache is updated (Arch Linux)

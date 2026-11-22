@@ -86,10 +86,10 @@
         that:
           - (_verify_disk2_cmds.results[0].stdout | trim) == 'dos'
           - (_verify_disk2_cmds.results[1].stdout | trim) == 'xfs'
-          - (_verify_disk2_cmds.results[2].stdout | trim) == 'XFS_DATA'
+          - (_verify_disk2_cmds.results[2].stdout | trim) == ('XFS_' ~ (inventory_hostname | hash('md5') | truncate(8, true, '') | upper))
           - "(molecule_loop_disk2 ~ 'p1') in (_verify_disk2_cmds.results[3].stdout | trim)"
           - "'xfs' in (_verify_disk2_cmds.results[3].stdout | trim)"
-          - "'LABEL=XFS_DATA' in _verify_fstab_text"
+          - "('LABEL=XFS_' ~ (inventory_hostname | hash('md5') | truncate(8, true, '') | upper)) in _verify_fstab_text"
           - "'/mnt/data_xfs' in _verify_fstab_text"
 
     - name: Inspect Disk 3 whole-disk filesystem and ephemeral mount state

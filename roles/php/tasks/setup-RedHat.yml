@@ -5,9 +5,37 @@
   ansible.builtin.dnf:
     name: epel-release
     state: present
+  register: _php_epel_install
+  retries: 3
+  delay: 5
+  until: _php_epel_install is succeeded
+
+- name: Check if Remi repository is already configured
+  ansible.builtin.stat:
+    path: /etc/yum.repos.d/remi.repo
+  register: _php_remi_repo_stat
 
 - name: Install Remi RPM repository
-  ansible.builtin.dnf:
-    name: "{{ php_remi_repo_url }}"
-    state: present
-    disable_gpg_check: true
+  when: not _php_remi_repo_stat.stat.exists
+  block:
+    - name: Download Remi RPM repository package
+      ansible.builtin.get_url:
+        url: "{{ php_remi_repo_url }}"
+        dest: /tmp/remi-release.rpm
+        mode: '0644'
+        timeout: 30
+      register: _php_remi_rpm_download
+      retries: 5
+      delay: 5
+      until: _php_remi_rpm_download is succeeded
+
+    - name: Install Remi RPM repository package
+      ansible.builtin.dnf:
+        name: /tmp/remi-release.rpm
+        state: present
+        disable_gpg_check: true
+
+    - name: Remove temporary Remi RPM repository package
+      ansible.builtin.file:
+        path: /tmp/remi-release.rpm
+        state: absent

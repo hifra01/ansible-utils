@@ -32,8 +32,11 @@ apt_mirror_signed_by: >-
   {{
     '/usr/share/keyrings/ubuntu-archive-keyring.gpg'
     if ansible_distribution == 'Ubuntu'
-    else
-    '/usr/share/keyrings/debian-archive-keyring.gpg'
+    else (
+      '/usr/share/keyrings/debian-archive-keyring.pgp'
+      if (ansible_distribution_version is version('13', '>='))
+      else '/usr/share/keyrings/debian-archive-keyring.gpg'
+    )
   }}
 
 apt_mirror_legacy_filename_main: "{{ 'ubuntu-main-mirror' if ansible_distribution == 'Ubuntu' else 'debian-main-mirror' }}"

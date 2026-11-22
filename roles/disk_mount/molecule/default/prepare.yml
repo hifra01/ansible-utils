@@ -29,9 +29,9 @@
       changed_when: false
 
     - name: Create 320 MB sparse backing files for loopback block devices
-      ansible.builtin.command: "truncate -s 320M /var/tmp/{{ item }}.img"
+      ansible.builtin.command: "truncate -s 320M /var/tmp/{{ inventory_hostname }}-{{ item }}.img"
       args:
-        creates: "/var/tmp/{{ item }}.img"
+        creates: "/var/tmp/{{ inventory_hostname }}-{{ item }}.img"
       loop:
         - disk1
         - disk2
@@ -41,7 +41,7 @@
     - name: Attach deterministic loopback block devices with partition scanning
       ansible.builtin.shell: |
         set -euo pipefail
-        img="/var/tmp/{{ item }}.img"
+        img="/var/tmp/{{ inventory_hostname }}-{{ item }}.img"
         existing="$(losetup -j "$img" | awk -F: 'NR==1 {print $1}')"
         if [ -n "$existing" ]; then
           printf '%s\n' "$existing"

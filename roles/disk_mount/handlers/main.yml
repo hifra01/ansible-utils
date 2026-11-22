@@ -6,4 +6,6 @@
   listen: "reload systemd daemon"
   ansible.builtin.systemd:
     daemon_reload: true
-  when: ansible_facts['service_mgr'] | default('') == 'systemd'
+  when:
+    - ansible_facts['service_mgr'] | default('') == 'systemd'
+    - ansible_facts['virtualization_type'] | default('') not in ['docker', 'containerd', 'podman', 'container']

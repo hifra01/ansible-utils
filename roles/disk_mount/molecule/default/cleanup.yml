@@ -48,7 +48,7 @@
       ansible.builtin.shell: |
         set -euo pipefail
         for name in disk1 disk2 disk3 disk4; do
-          img="/var/tmp/${name}.img"
+          img="/var/tmp/{{ inventory_hostname }}-${name}.img"
           if [ -e "$img" ]; then
             for dev in $(losetup -j "$img" 2>/dev/null | awk -F: '{print $1}'); do
               [ -n "$dev" ] && losetup -d "$dev" || true
@@ -64,8 +64,8 @@
         path: "{{ item }}"
         state: absent
       loop:
-        - /var/tmp/disk1.img
-        - /var/tmp/disk2.img
-        - /var/tmp/disk3.img
-        - /var/tmp/disk4.img
+        - "/var/tmp/{{ inventory_hostname }}-disk1.img"
+        - "/var/tmp/{{ inventory_hostname }}-disk2.img"
+        - "/var/tmp/{{ inventory_hostname }}-disk3.img"
+        - "/var/tmp/{{ inventory_hostname }}-disk4.img"
         - /var/tmp/molecule-loop-devices.yml

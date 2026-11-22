@@ -25,6 +25,10 @@
   ansible.builtin.apt:
     update_cache: true
     cache_valid_time: 3600
+  register: _disk_mount_apt_cache
+  retries: 3
+  delay: 5
+  until: _disk_mount_apt_cache is succeeded
   when:
     - _disk_mount_active_entries | length > 0
     - ansible_facts['os_family'] == 'Debian'
@@ -33,4 +37,8 @@
   ansible.builtin.package:
     name: "{{ _disk_mount_required_packages }}"
     state: present
+  register: _disk_mount_pkg_install
+  retries: 3
+  delay: 5
+  until: _disk_mount_pkg_install is succeeded
   when: _disk_mount_active_entries | length > 0

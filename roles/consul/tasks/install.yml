@@ -6,6 +6,10 @@
   ansible.builtin.package:
     name: "{{ consul_package_name }}"
     state: "{{ consul_package_state }}"
+  register: _consul_pkg_install
+  retries: 3
+  delay: 5
+  until: _consul_pkg_install is succeeded
 
 - name: Ensure Consul configuration and data directories exist with proper ownership
   ansible.builtin.file:
