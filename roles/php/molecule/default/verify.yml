@@ -10,3 +10,43 @@
     - name: Assert PHP CLI version
       ansible.builtin.assert:
         that: "'8.2' in _php_cli.stdout"
+
+    - name: Verify Ondřej Surý APT repository configuration on Debian/Ubuntu
+      when: ansible_os_family == 'Debian'
+      block:
+        - name: Check Surý GPG key exists
+          ansible.builtin.stat:
+            path: /etc/apt/trusted.gpg.d/sury-php.gpg
+          register: _php_sury_gpg
+
+        - name: Check Surý APT source list exists
+          ansible.builtin.stat:
+            path: /etc/apt/sources.list.d/sury-php.list
+          register: _php_sury_list
+
+        - name: Assert Surý GPG key and APT source list exist
+          ansible.builtin.assert:
+            that:
+              - _php_sury_gpg.stat.exists
+              - _php_sury_list.stat.exists
+
+        - name: Read Surý APT source list
+          ansible.builtin.slurp:
+            src: /etc/apt/sources.list.d/sury-php.list
+          register: _php_sury_list_content
+
+        - name: Assert Surý APT source list points to packages.sury.org
+          ansible.builtin.assert:
+            that:
+              - "'https://packages.sury.org/php/' in (_php_sury_list_content.content | b64decode)"
+
+        - name: Find any Ondřej PPA source files
+          ansible.builtin.find:
+            paths: /etc/apt/sources.list.d
+            patterns: "*ondrej*"
+          register: _php_ondrej_ppa_files
+
+        - name: Assert no Ondřej PPA source files exist
+          ansible.builtin.assert:
+            that:
+              - _php_ondrej_ppa_files.matched == 0

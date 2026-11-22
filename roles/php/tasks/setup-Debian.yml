@@ -12,41 +12,23 @@
   delay: 5
   until: _php_debian_pre_pkgs is succeeded
 
-- name: Add Ondřej Surý PHP repository (Debian and Ubuntu 26.04+)
-  when: >-
-    ansible_distribution == 'Debian' or
-    (ansible_distribution == 'Ubuntu' and ansible_distribution_version is version('26.04', '>='))
-  block:
-    - name: Download Ondřej Surý PHP repository GPG key
-      ansible.builtin.get_url:
-        url: https://packages.sury.org/php/apt.gpg
-        dest: /etc/apt/trusted.gpg.d/sury-php.gpg
-        mode: '0644'
-      register: _php_sury_key
-      retries: 3
-      delay: 5
-      until: _php_sury_key is succeeded
-
-    - name: Add Ondřej Surý PHP apt repository
-      ansible.builtin.apt_repository:
-        repo: "deb [signed-by=/etc/apt/trusted.gpg.d/sury-php.gpg] https://packages.sury.org/php/ {{ ansible_distribution_release }} main"
-        state: present
-        filename: sury-php
-        update_cache: true
-      register: _php_sury_repo
-      retries: 3
-      delay: 5
-      until: _php_sury_repo is succeeded
-
-- name: Add Ondřej Surý PHP PPA on Ubuntu (< 26.04)
-  ansible.builtin.apt_repository:
-    repo: 'ppa:ondrej/php'
-    state: present
-    update_cache: true
-  register: _php_ubuntu_ppa
+- name: Download Ondřej Surý PHP repository GPG key
+  ansible.builtin.get_url:
+    url: https://packages.sury.org/php/apt.gpg
+    dest: /etc/apt/trusted.gpg.d/sury-php.gpg
+    mode: '0644'
+  register: _php_sury_key
   retries: 3
   delay: 5
-  until: _php_ubuntu_ppa is succeeded
-  when:
-    - ansible_distribution == 'Ubuntu'
-    - ansible_distribution_version is version('26.04', '<')
+  until: _php_sury_key is succeeded
+
+- name: Add Ondřej Surý PHP apt repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/trusted.gpg.d/sury-php.gpg] https://packages.sury.org/php/ {{ ansible_distribution_release }} main"
+    state: present
+    filename: sury-php
+    update_cache: true
+  register: _php_sury_repo
+  retries: 3
+  delay: 5
+  until: _php_sury_repo is succeeded
